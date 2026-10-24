@@ -1,0 +1,32 @@
+name: Release
+
+# Pousser une étiquette « vX.Y.Z » fabrique le .exe et publie la Release.
+# L'application vérifie cette Release au démarrage pour se mettre à jour.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+      - name: Inscrire la version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          Set-Content -Path vacances/_version.py -Value "__version__ = `"$version`"" -Encoding utf8
+      - name: Fabriquer le .exe
+        run: pyinstaller --noconfirm --onefile --windowed --name CalculateurVacances main.py
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CalculateurVacances.exe
+          generate_release_notes: true
