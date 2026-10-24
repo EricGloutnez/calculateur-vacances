@@ -13,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, calcul, updater
+from . import __version__, calcul, installation, updater
 from .db import Base
 
 VERT = "#1F6F5C"
@@ -408,7 +408,7 @@ class DialoguePeriode(Dialogue):
 
 
 class Application(tk.Tk):
-    def __init__(self, base):
+    def __init__(self, base, vient_d_installer=False):
         super().__init__()
         self.base = base
         self.release = None
@@ -417,12 +417,17 @@ class Application(tk.Tk):
         self.geometry("1040x740")
         self.minsize(900, 620)
         self.configure(bg=FOND)
+        icone = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) / "icone.ico"
+        if sys.platform == "win32" and icone.exists():
+            self.iconbitmap(default=str(icone))
         self._styles()
         self._construire()
         self.rafraichir()
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
-        if not base.est_configure:
+        if vient_d_installer:
+            self.after(300, self._bienvenue_installation)
+        elif not base.est_configure:
             self.after(300, self.ouvrir_parametres)
         elif base.maj_auto:
             self.verifier_maj(silencieux=True)
@@ -678,6 +683,16 @@ class Application(tk.Tk):
     def deduire_vacances(self):
         DialogueVacances(self)
 
+    def _bienvenue_installation(self):
+        messagebox.showinfo(
+            "Installation terminée",
+            "Le Calculateur de vacances est installé sur cet ordinateur.\n\n"
+            "Un raccourci a été créé sur le Bureau et dans le menu Démarrer.\n"
+            "Tu peux supprimer le fichier que tu as téléchargé.",
+            parent=self)
+        if not self.base.est_configure:
+            self.ouvrir_parametres()
+
     def ouvrir_parametres(self):
         DialogueParametres(self)
 
@@ -832,9 +847,30 @@ class Application(tk.Tk):
         threading.Thread(target=travail, daemon=True).start()
 
 
+def _installer(base):
+    """Installe le .exe téléchargé et lance la copie installée ; False si l'installation échoue."""
+    try:
+        cible = installation.installer(__version__, base.version_installee)
+    except Exception as err:  # pas de PowerShell, disque plein, antivirus…
+        racine = tk.Tk()
+        racine.withdraw()
+        messagebox.showwarning(
+            "Installation", f"Installation impossible :\n{err}\n\n"
+                            "L'application va s'ouvrir quand même, sans raccourci.", parent=racine)
+        racine.destroy()
+        return False
+    installation.lancer(cible, "--installe")
+    return True
+
+
 def main():
     base = Base()
     try:
-        Application(base).mainloop()
+        if installation.doit_installer():
+            if _installer(base):
+                return
+        elif installation.est_exe_windows():
+            base.version_installee = __version__
+        Application(base, vient_d_installer="--installe" in sys.argv).mainloop()
     finally:
         base.fermer()

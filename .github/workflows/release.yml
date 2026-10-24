@@ -32,8 +32,19 @@ jobs:
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version invalide : $version" }
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Set-Content -Path vacances/_version.py -Value "__version__ = `"$version`"" -Encoding utf8
+      - name: Vérifier la création des raccourcis sous Windows
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; from vacances import installation as i; i.creer_raccourcis(Path(r'C:\Windows\notepad.exe'))"
+          foreach ($dossier in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
+            $lnk = Join-Path $dossier 'Calculateur de vacances.lnk'
+            if (-not (Test-Path $lnk)) { throw "Raccourci absent : $lnk" }
+            $cible = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath
+            if ($cible -ne 'C:\Windows\notepad.exe') { throw "Mauvaise cible : $cible" }
+            Remove-Item $lnk
+          }
       - name: Fabriquer le .exe
-        run: pyinstaller --noconfirm --onefile --windowed --name CalculateurVacances main.py
+        run: pyinstaller --noconfirm --onefile --windowed --name CalculateurVacances --icon icone.ico --add-data "icone.ico;." main.py
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}

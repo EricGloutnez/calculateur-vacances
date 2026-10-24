@@ -143,6 +143,15 @@ class Base:
         self._set_param("maj_auto", "1" if valeur else "0")
 
     @property
+    def version_installee(self):
+        """Version de la copie installée (inscrite par celle-ci à chaque démarrage)."""
+        return self._param("version_installee")
+
+    @version_installee.setter
+    def version_installee(self, valeur):
+        self._set_param("version_installee", valeur)
+
+    @property
     def est_configure(self):
         return self._param("taux") is not None
 

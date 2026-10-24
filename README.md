@@ -13,7 +13,15 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 ## Télécharger
 
 Va dans [Releases](https://github.com/EricGloutnez/calculateur-vacances/releases/latest)
-et télécharge **`CalculateurVacances.exe`**. Aucune installation : double-clique pour l'ouvrir.
+et télécharge **`CalculateurVacances.exe`**, puis double-clique dessus.
+
+Au premier lancement, l'application **s'installe d'elle-même** (sans droits d'administrateur)
+dans `%LOCALAPPDATA%\Programs\CalculateurVacances` et crée un raccourci
+**« Calculateur de vacances »** sur le Bureau et dans le menu Démarrer.
+Le fichier téléchargé peut ensuite être supprimé.
+
+Pour désinstaller : supprime le dossier `%LOCALAPPDATA%\Programs\CalculateurVacances`
+et les deux raccourcis (tes données restent dans `%APPDATA%\CalculateurVacances`).
 
 > Au premier lancement, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur »
 > (l'exécutable n'est pas signé). Clique sur **Informations complémentaires → Exécuter quand même**.
