@@ -385,14 +385,10 @@ class DialogueParametres(Dialogue):
 
         ttk.Separator(c).grid(row=8, column=0, sticky="we", pady=(0, 12))
         ttk.Label(c, text="Mises à jour", style="Champ.TLabel").grid(row=9, column=0, sticky="w", pady=(0, 6))
-        self.var_maj = tk.BooleanVar(value=base.maj_auto)
-        ttk.Checkbutton(c, text="Vérifier automatiquement au démarrage (GitHub)", variable=self.var_maj,
-                        style="Carte.TCheckbutton").grid(row=10, column=0, sticky="w")
         ligne_v = ttk.Frame(c, style="Carte.TFrame")
-        ligne_v.grid(row=11, column=0, sticky="we", pady=(8, 12))
+        ligne_v.grid(row=11, column=0, sticky="we", pady=(0, 12))
         ttk.Label(ligne_v, text=f"Version installée : {__version__}", style="Aide.TLabel").pack(side="left")
-        ttk.Button(ligne_v, text="Vérifier maintenant",
-                   command=lambda: self.parent.verifier_maj(silencieux=False, parent=self)).pack(side="right")
+        ttk.Button(ligne_v, text="Mettre à jour", command=self.parent.mise_a_jour_directe).pack(side="right")
 
         ttk.Label(c, text="Sauvegarde", style="Champ.TLabel").grid(row=12, column=0, sticky="w", pady=(0, 6))
         ligne_s = ttk.Frame(c, style="Carte.TFrame")
@@ -426,7 +422,6 @@ class DialogueParametres(Dialogue):
             raise ValueError("Le solde de départ ne peut pas être négatif.")
         base.taux = taux
         base.pct = pct
-        base.maj_auto = self.var_maj.get()
         base.definir_solde_depart(depart, date_depart)
         self.parent.rafraichir()
         return True
@@ -706,8 +701,6 @@ class Application(tk.Tk):
             self.after(300, self._bienvenue_installation)
         elif not self.base.premier_lancement_fait:
             self.after(300, self._premier_lancement)
-        if self.base.maj_auto:
-            self.verifier_maj(silencieux=True)
 
     def _premier_lancement(self):
         """Paramètres ouverts une seule fois, au tout premier lancement."""
@@ -787,16 +780,6 @@ class Application(tk.Tk):
         s.map("Treeview", background=[("selected", VERT_PALE)], foreground=[("selected", TEXTE)])
 
     def _construire(self):
-        # Bannière de mise à jour (affichée seulement si une version plus récente existe)
-        self.banniere = tk.Frame(self, bg=VERT_PALE, padx=24, pady=8)
-        self.lbl_banniere = tk.Label(self.banniere, bg=VERT_PALE, fg=TEXTE, font=(POLICE, 10), anchor="w")
-        self.lbl_banniere.pack(side="left", fill="x", expand=True)
-        self.btn_plus_tard = ttk.Button(self.banniere, text="Plus tard", command=self.banniere.pack_forget)
-        self.btn_plus_tard.pack(side="right", padx=(8, 0))
-        self.btn_maj = ttk.Button(self.banniere, text="Mettre à jour", style="Primaire.TButton",
-                                  command=self.installer_maj)
-        self.btn_maj.pack(side="right")
-
         self._menus()
         self.contenu = ttk.Frame(self, padding=(24, 18, 24, 24))
         self.contenu.pack(fill="both", expand=True)
@@ -1377,17 +1360,10 @@ class Application(tk.Tk):
                 parent = parent if parent is not None and parent.winfo_exists() else self
                 if genre == "verif":
                     if valeur:
+                        # Mise à jour demandée par le bouton : installation directe, sans question.
                         self.release = valeur
-                        self._afficher_banniere()
-                        if getattr(self, "_installer_direct", False):
-                            self._installer_direct = False
-                            self.installer_maj()
-                        elif messagebox.askyesno(
-                                "Mise à jour disponible",
-                                f"La version {valeur.version} est disponible (tu as la {__version__}).\n\n"
-                                "L'installer maintenant ? L'application va se fermer puis se rouvrir.",
-                                parent=parent):
-                            self.installer_maj()
+                        self._installer_direct = False
+                        self.installer_maj()
                     elif not silencieux:
                         messagebox.showinfo("Mise à jour", "Tu as déjà la dernière version.", parent=parent)
                 elif genre == "erreur" and not silencieux:
@@ -1401,15 +1377,10 @@ class Application(tk.Tk):
                     messagebox.showerror("Mise à jour", f"Le téléchargement a échoué :\n{valeur}\n\n"
                                                         "La page de téléchargement va s'ouvrir.", parent=self)
                     webbrowser.open(self.release.url_page)
-                    self._afficher_banniere()
+                    self.btn_mise_a_jour.configure(text="Mise à jour", state="normal")
         except queue.Empty:
             pass
         self.after(150, self._sonder_maj)
-
-    def _afficher_banniere(self):
-        self.lbl_banniere.configure(text=f"Une nouvelle version (v{self.release.version}) est disponible sur GitHub.")
-        self.btn_maj.state(["!disabled"])
-        self.banniere.pack(fill="x", before=self.contenu)
 
     def installer_maj(self):
         release = self.release
@@ -1418,8 +1389,7 @@ class Application(tk.Tk):
         if not updater.peut_installer(release):
             webbrowser.open(release.url_page)
             return
-        self.lbl_banniere.configure(text=f"Téléchargement de la version {release.version}…")
-        self.btn_maj.state(["disabled"])
+        self.btn_mise_a_jour.configure(text=f"Téléchargement de la version {release.version}…", state="disabled")
 
         def travail():
             try:
