@@ -854,7 +854,7 @@ class Application(tk.Tk):
 
         zone = tk.Frame(gauche, bg=BLANC, highlightbackground="#C8CDCA", highlightcolor="#C8CDCA",
                         highlightthickness=1, padx=12, pady=8)
-        zone.pack(fill="x", pady=(16, 0))
+        zone.pack(fill="x", pady=(0, 16), before=champs)
         tk.Label(zone, image=self.img_trombone, bg=BLANC).pack(side="left")
         ttk.Label(zone, text="Relevé de paye", style="Aide.TLabel").pack(side="left", padx=(8, 0))
         self.releve_periode = ChoixReleve(zone, on_change=self._releve_choisi)
@@ -1046,7 +1046,7 @@ class Application(tk.Tk):
         self.var_fin.set(fin.isoformat())
         self.var_heures.set("")
         self.releve_periode.reinitialiser()
-        self.entree_heures.focus_set()
+        self.releve_periode.btn.focus_set()
 
     def _taux_releve(self, heures):
         analyse = getattr(self, "_analyse", None)
@@ -1096,6 +1096,9 @@ class Application(tk.Tk):
                 self.var_fin.set(fin.isoformat())
             if self._analyse.suggestion is not None:
                 self.var_heures.set(calcul.formater_simple(self._analyse.suggestion))
+            # Étape 2 : corriger les heures au besoin.
+            self.entree_heures.focus_set()
+            self.entree_heures.select_range(0, "end")
         self._verifier_releve()
 
     def _verifier_releve(self):
