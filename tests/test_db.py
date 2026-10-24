@@ -136,10 +136,11 @@ def test_releve_pdf(base, tmp_path):
     id_ = base.ajouter_periode(D(2026, 10, 7), D(2026, 10, 21), Decimal(80))
     assert base.entree(id_).releve is None
     base.joindre_releve(id_, *Base.lire_pdf(fichier))
-    assert base.entree(id_).releve == "releve-2026-10-21.pdf"
-    assert base.lire_releve(id_) == ("releve-2026-10-21.pdf", PDF)
-    base.joindre_releve(id_, "autre.pdf", PDF + b"x")
-    assert base.lire_releve(id_)[0] == "autre.pdf"
+    # Nom neutre tiré des dates, jamais le nom du fichier d'origine
+    assert base.entree(id_).releve == "Releve_2026-10-07_au_2026-10-21.pdf"
+    assert base.lire_releve(id_) == ("Releve_2026-10-07_au_2026-10-21.pdf", PDF)
+    base.joindre_releve(id_, "DUPONT_JEAN.pdf", PDF + b"x")
+    assert base.lire_releve(id_) == ("Releve_2026-10-07_au_2026-10-21.pdf", PDF + b"x")
     base.retirer_releve(id_)
     assert base.lire_releve(id_) is None
 
@@ -152,7 +153,7 @@ def test_releve_supprime_avec_entree_et_exporte(base, tmp_path):
     base.supprimer(id_)
     assert base.conn.execute("SELECT COUNT(*) FROM releves").fetchone()[0] == 0
     base.importer(sauvegarde)
-    assert base.lire_releve(id_) == ("r.pdf", PDF)
+    assert base.lire_releve(id_) == ("Releve_2026-10-13.pdf", PDF)
 
 
 def test_lire_pdf_refuse_autre_chose(tmp_path):
@@ -182,7 +183,7 @@ def test_base_version_1_migree(tmp_path):
     [e] = b.entrees()
     assert e.montant == Decimal(80) and e.releve is None
     b.joindre_releve(e.id, "r.pdf", PDF)
-    assert b.entree(e.id).releve == "r.pdf"
+    assert b.entree(e.id).releve == "Releve_2026-10-07_au_2026-10-21.pdf"
     b.fermer()
 
 

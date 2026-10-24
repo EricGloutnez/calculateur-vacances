@@ -10,13 +10,14 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - L'historique montre le solde cumulé ligne par ligne. Double-clic pour modifier, Suppr pour effacer.
 - Optionnel : un **mot de passe** demandé à l'ouverture (Paramètres → Mot de passe à l'ouverture).
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
-- **Fichier → Confidentiel** cache tous les chiffres (pour une démonstration).
+- **Confidentiel** (à droite de la barre de menus) cache tous les chiffres, pour une démonstration.
 - **Fichier → Outils → Affichage** permet de masquer ou d'afficher les soldes et l'historique.
 - Les dates se tapent (AAAA-MM-JJ) ou se choisissent dans un **calendrier**.
 - Le relevé PDF joint est **lu pour contre-vérifier les heures** (et les dates) de la période ;
   les dates, les heures et le taux de la période sont repris du relevé.
 - Tu peux **joindre le relevé de paye (PDF)** à une période ou à des vacances prises.
-  Il est conservé dans la base de l'application ; clic droit sur la ligne pour l'ouvrir ou l'enregistrer.
+  Il est conservé dans la base de l'application sous un nom neutre (`Releve_<début>_au_<fin>.pdf`) ;
+  clic droit sur la ligne pour l'ouvrir ou l'enregistrer.
 
 ## Télécharger
 
@@ -43,9 +44,9 @@ Dans Paramètres, **Exporter / Importer** permet de faire une sauvegarde ou de p
 
 ## Mises à jour automatiques
 
-Au démarrage, l'application vérifie la dernière Release sur GitHub. Si une version
-plus récente existe, une bannière s'affiche : **Mettre à jour** télécharge le nouveau
-`.exe`, remplace l'ancien et relance l'application.
+Au démarrage, l'application vérifie la dernière Release sur GitHub et propose de l'installer.
+Le bouton **Mise à jour** de la barre de menus vérifie et installe directement, sans question :
+le nouveau `.exe` remplace l'ancien et l'application redémarre.
 
 ## Publier une nouvelle version (développeur)
 

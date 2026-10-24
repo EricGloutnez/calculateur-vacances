@@ -142,7 +142,7 @@ class ChoixReleve(ttk.Frame):
 
     def _maj(self):
         nom = Path(self.chemin).name if self.chemin else (None if self.retirer else self.nom_existant)
-        self.lbl.configure(text=_abreger(nom) if nom else "aucun relevé")
+        self.lbl.configure(text="relevé joint" if nom else "aucun relevé")
         self.btn.configure(text="Remplacer…" if nom else "Joindre le relevé PDF…")
         if nom:
             self.btn_x.pack(side="left", padx=(6, 0))
@@ -928,8 +928,17 @@ class Application(tk.Tk):
         self.arbre.bind("<Button-3>", menu_contextuel)
 
     def _menus(self):
-        barre = tk.Menu(self)
-        fichier = tk.Menu(barre, tearoff=False)
+        """Barre maison : Fichier et Mise à jour à gauche, Confidentiel complètement à droite."""
+        barre = tk.Frame(self, bg=BLANC)
+        barre.pack(side="top", fill="x")
+        tk.Frame(self, bg=BORD, height=1).pack(side="top", fill="x")
+        style = dict(bg=BLANC, fg=TEXTE, activebackground=VERT_PALE, activeforeground=TEXTE, relief="flat", bd=0,
+                     font=(POLICE, 10), padx=12, pady=5, cursor="hand2")
+
+        bouton_fichier = tk.Menubutton(barre, text="Fichier", **style)
+        bouton_fichier.pack(side="left")
+        fichier = tk.Menu(bouton_fichier, tearoff=False)
+        bouton_fichier.configure(menu=fichier)
         outils = tk.Menu(fichier, tearoff=False)
         affichage = tk.Menu(outils, tearoff=False)
 
@@ -962,20 +971,22 @@ class Application(tk.Tk):
 
         fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
         fichier.add_separator()
-        self.var_confidentiel = tk.BooleanVar(value=self.confidentiel)
-        fichier.add_checkbutton(label="Confidentiel (cacher les chiffres)", variable=self.var_confidentiel,
-                                command=self._appliquer_confidentiel)
         fichier.add_cascade(label="Outils", menu=outils)
         fichier.add_separator()
         fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
         fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
         fichier.add_separator()
         fichier.add_command(label="Quitter", command=self.destroy)
-        barre.add_cascade(label="Fichier", menu=fichier)
 
-        # Un clic directement dans la barre lance la vérification.
-        barre.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
-        self.configure(menu=barre)
+        # Mise à jour : un clic vérifie et installe directement.
+        self.btn_mise_a_jour = tk.Button(barre, text="Mise à jour", command=self.mise_a_jour_directe,
+                                         highlightthickness=0, **style)
+        self.btn_mise_a_jour.pack(side="left")
+
+        self.var_confidentiel = tk.BooleanVar(value=self.confidentiel)
+        tk.Checkbutton(barre, text="Confidentiel", variable=self.var_confidentiel, command=self._appliquer_confidentiel,
+                       bg=BLANC, fg=TEXTE, activebackground=VERT_PALE, selectcolor=BLANC, bd=0,
+                       highlightthickness=0, font=(POLICE, 10), padx=12, pady=5, cursor="hand2").pack(side="right")
         self.bind_all("<Control-d>", lambda _e: self.deduire_vacances())
         self.bind_all("<Control-D>", lambda _e: self.deduire_vacances())
 
@@ -1341,6 +1352,12 @@ class Application(tk.Tk):
 
     # --- Mises à jour -------------------------------------------------------
 
+    def mise_a_jour_directe(self):
+        """Bouton « Mise à jour » : s'il y a une nouvelle version, elle s'installe sans question."""
+        self._installer_direct = True
+        self.btn_mise_a_jour.configure(text="Vérification…")
+        self.verifier_maj(silencieux=False)
+
     def verifier_maj(self, silencieux=True, parent=None):
         def travail():
             try:
@@ -1353,12 +1370,19 @@ class Application(tk.Tk):
         try:
             while True:
                 genre, silencieux, parent, valeur = self._file_maj.get_nowait()
+                if genre in ("verif", "erreur") and hasattr(self, "btn_mise_a_jour"):
+                    self.btn_mise_a_jour.configure(text="Mise à jour")
+                    if not valeur or genre == "erreur":
+                        self._installer_direct = False
                 parent = parent if parent is not None and parent.winfo_exists() else self
                 if genre == "verif":
                     if valeur:
                         self.release = valeur
                         self._afficher_banniere()
-                        if messagebox.askyesno(
+                        if getattr(self, "_installer_direct", False):
+                            self._installer_direct = False
+                            self.installer_maj()
+                        elif messagebox.askyesno(
                                 "Mise à jour disponible",
                                 f"La version {valeur.version} est disponible (tu as la {__version__}).\n\n"
                                 "L'installer maintenant ? L'application va se fermer puis se rouvrir.",

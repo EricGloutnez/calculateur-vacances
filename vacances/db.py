@@ -293,7 +293,7 @@ class Base:
 
     def lire_releve(self, id_):
         row = self.conn.execute("SELECT nom, contenu FROM releves WHERE entree_id = ?", (id_,)).fetchone()
-        return (row["nom"], bytes(row["contenu"])) if row else None
+        return (self.entree(id_).releve, bytes(row["contenu"])) if row else None
 
     def retirer_releve(self, id_):
         self.conn.execute("DELETE FROM releves WHERE entree_id = ?", (id_,))
@@ -328,7 +328,7 @@ class Base:
                 montant=montant,
                 note=r["note"],
                 solde=solde,
-                releve=r["releve_nom"],
+                releve=_nom_releve(r) if r["releve_nom"] else None,
             ))
         return resultat
 
@@ -405,6 +405,13 @@ class Base:
         if montant is None or Decimal(montant) <= 0:
             raise ValueError("Le montant doit être plus grand que 0.")
         return None, calcul.arrondir(montant)
+
+
+def _nom_releve(r):
+    """Nom neutre du relevé, tiré des dates (le nom d'origine contient souvent le nom de l'employé)."""
+    if r["date_fin"]:
+        return f"Releve_{r['date_debut']}_au_{r['date_fin']}.pdf"
+    return f"Releve_{r['date_debut']}.pdf"
 
 
 def _empreinte(mot_de_passe, sel, iterations):
