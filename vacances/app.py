@@ -1227,9 +1227,12 @@ class Application(tk.Tk):
                     if valeur:
                         self.release = valeur
                         self._afficher_banniere()
-                        if not silencieux:
-                            messagebox.showinfo("Mise à jour", f"La version {valeur.version} est disponible.",
-                                                parent=parent)
+                        if messagebox.askyesno(
+                                "Mise à jour disponible",
+                                f"La version {valeur.version} est disponible (tu as la {__version__}).\n\n"
+                                "L'installer maintenant ? L'application va se fermer puis se rouvrir.",
+                                parent=parent):
+                            self.installer_maj()
                     elif not silencieux:
                         messagebox.showinfo("Mise à jour", "Tu as déjà la dernière version.", parent=parent)
                 elif genre == "erreur" and not silencieux:
