@@ -944,6 +944,10 @@ class Application(tk.Tk):
                 outils.add_command(label="Retirer le mot de passe…", command=lambda: self.mot_de_passe(True))
             else:
                 outils.add_command(label="Définir un mot de passe…", command=lambda: self.mot_de_passe(False))
+            outils.add_separator()
+            outils.add_command(label="À propos", command=lambda: messagebox.showinfo(
+                "À propos", f"Calculateur de vacances\nVersion {__version__}\n\nDonnées : {self.base.chemin}",
+                parent=self))
         outils.configure(postcommand=remplir_outils)
         remplir_outils()
 
@@ -957,13 +961,8 @@ class Application(tk.Tk):
         fichier.add_command(label="Quitter", command=self.destroy)
         barre.add_cascade(label="Fichier", menu=fichier)
 
-        aide = tk.Menu(barre, tearoff=False)
-        aide.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
-        aide.add_separator()
-        aide.add_command(label="À propos", command=lambda: messagebox.showinfo(
-            "À propos", f"Calculateur de vacances\nVersion {__version__}\n\nDonnées : {self.base.chemin}",
-            parent=self))
-        barre.add_cascade(label="Aide", menu=aide)
+        # Un clic directement dans la barre lance la vérification.
+        barre.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
         self.configure(menu=barre)
         self.bind_all("<Control-d>", lambda _e: self.deduire_vacances())
         self.bind_all("<Control-D>", lambda _e: self.deduire_vacances())
