@@ -829,7 +829,6 @@ class Application(tk.Tk):
         titre = ttk.Frame(gauche, style="Carte.TFrame")
         titre.pack(fill="x", pady=(0, 12))
         ttk.Label(titre, text="Nouvelle période de paye", style="SousTitre.TLabel").pack(side="left")
-        ttk.Label(titre, text="Dates remplies automatiquement (+14 jours)", style="Aide.TLabel").pack(side="right")
 
         champs = ttk.Frame(gauche, style="Carte.TFrame")
         champs.pack(fill="x")
@@ -857,7 +856,7 @@ class Application(tk.Tk):
                         highlightthickness=1, padx=12, pady=8)
         zone.pack(fill="x", pady=(16, 0))
         tk.Label(zone, image=self.img_trombone, bg=BLANC).pack(side="left")
-        ttk.Label(zone, text="Relevé de paye (PDF, optionnel)", style="Aide.TLabel").pack(side="left", padx=(8, 0))
+        ttk.Label(zone, text="Relevé de paye", style="Aide.TLabel").pack(side="left", padx=(8, 0))
         self.releve_periode = ChoixReleve(zone, on_change=self._releve_choisi)
         self.releve_periode.pack(side="right")
         self.cadre_verif = ttk.Frame(gauche, style="Carte.TFrame")
@@ -1120,13 +1119,12 @@ class Application(tk.Tk):
         v = releve.verifier(self._analyse, heures, *dates)
         couleurs = {"ok": (VERT, "✓  "), "attention": (ROUGE, "⚠  "), "inconnu": (GRIS, "")}
         couleur, prefixe = couleurs[v.statut]
-        texte = prefixe + v.message
-        taux = self._taux_releve(heures)
-        if taux:
-            texte += (f"\nTaux selon le relevé : {calcul.formater_argent(taux)}/h "
-                      f"({calcul.formater_argent(self._analyse.gains)} ÷ {calcul.formater_nombre(heures)} h)")
-        self.lbl_verif.configure(text=texte, fg=couleur)
-        self.lbl_verif.pack(side="left", fill="x", expand=True, pady=(8, 0))
+        # Tout concorde : rien à afficher ; seuls les écarts et les problèmes de lecture sont signalés.
+        if v.statut == "ok":
+            self.lbl_verif.pack_forget()
+        else:
+            self.lbl_verif.configure(text=prefixe + v.message, fg=couleur)
+            self.lbl_verif.pack(side="left", fill="x", expand=True, pady=(8, 0))
         if v.suggestion is not None and v.suggestion != heures:
             self._suggestion = v.suggestion
             self.btn_suggestion.configure(text=f"Utiliser {calcul.formater_nombre(v.suggestion)} h")
