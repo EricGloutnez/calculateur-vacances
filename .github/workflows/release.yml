@@ -1,10 +1,16 @@
 name: Release
 
-# Pousser une étiquette « vX.Y.Z » fabrique le .exe et publie la Release.
+# Fabrique le .exe et publie la Release « vX.Y.Z », soit en poussant l'étiquette,
+# soit avec le bouton « Run workflow » (onglet Actions) en donnant le numéro de version.
 # L'application vérifie cette Release au démarrage pour se mettre à jour.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Numéro de version (ex. 1.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -22,11 +28,15 @@ jobs:
       - name: Inscrire la version
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart("v")
+          $version = "${{ inputs.version || github.ref_name }}".TrimStart("v")
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version invalide : $version" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Set-Content -Path vacances/_version.py -Value "__version__ = `"$version`"" -Encoding utf8
       - name: Fabriquer le .exe
         run: pyinstaller --noconfirm --onefile --windowed --name CalculateurVacances main.py
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           files: dist/CalculateurVacances.exe
           generate_release_notes: true

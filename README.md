@@ -31,9 +31,11 @@ plus récente existe, une bannière s'affiche : **Mettre à jour** télécharge 
 
 ## Publier une nouvelle version (développeur)
 
+Dans l'onglet **Actions → Release → Run workflow**, entre le numéro (ex. `1.1.0`).
+Ou en ligne de commande :
+
 ```powershell
-git tag v1.1.0
-git push origin v1.1.0
+gh workflow run release.yml -R EricGloutnez/calculateur-vacances -f version=1.1.0
 ```
 
 GitHub Actions lance les tests, fabrique `CalculateurVacances.exe` avec PyInstaller
