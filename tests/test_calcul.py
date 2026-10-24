@@ -55,3 +55,10 @@ def test_formatage():
 def test_prochaine_periode():
     debut, fin = calcul.prochaine_periode(dt.date(2026, 10, 7), dt.date(2026, 10, 21))
     assert (debut, fin) == (dt.date(2026, 10, 21), dt.date(2026, 11, 4))
+
+
+def test_masquer_mode_confidentiel():
+    masquer = calcul.masquer
+    assert masquer("1 234,50 $", True) == "••• $"
+    assert masquer("68 h × 62,50 $ × 4 %", True) == "••• h × ••• $ × ••• %"
+    assert masquer("68 h", False) == "68 h"

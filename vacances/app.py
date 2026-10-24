@@ -369,7 +369,8 @@ class DialogueParametres(Dialogue):
         ligne_dep.grid(row=5, column=0, sticky="w")
         self.var_depart = tk.StringVar(value=calcul.formater_nombre(depart.montant) if depart else "0,00")
         self.var_date_depart = tk.StringVar(value=(depart.debut if depart else dt.date(dt.date.today().year, 1, 1)).isoformat())
-        ttk.Entry(ligne_dep, textvariable=self.var_depart, width=12, font=(POLICE, 11)).pack(side="left")
+        self.e_depart = ttk.Entry(ligne_dep, textvariable=self.var_depart, width=12, font=(POLICE, 11))
+        self.e_depart.pack(side="left")
         ttk.Label(ligne_dep, text=" $  au ", style="Carte.TLabel").pack(side="left")
         ChampDate(ligne_dep, self.var_date_depart).pack(side="left")
         ttk.Label(c, text="Pour reprendre un solde déjà inscrit sur ton talon de paye.", style="Aide.TLabel").grid(
@@ -407,6 +408,9 @@ class DialogueParametres(Dialogue):
         self.ligne_mdp = ttk.Frame(c, style="Carte.TFrame")
         self.ligne_mdp.grid(row=17, column=0, sticky="we")
         self._maj_mdp()
+        if self.parent.confidentiel:
+            e_taux.configure(show="•")
+            self.e_depart.configure(show="•")
         e_taux.focus_set()
         e_taux.select_range(0, "end")
 
@@ -600,17 +604,19 @@ class DialogueVacances(Dialogue):
         except ValueError:
             heures, montant = None, None
         if montant is None:
-            self.lbl_calc.configure(text=f"h  ×  {calcul.formater_argent(self.taux)}" if heures_mode else "$")
+            self.lbl_calc.configure(text=calcul.masquer(f"h  ×  {calcul.formater_argent(self.taux)}", self.parent.confidentiel)
+                                    if heures_mode else "$")
             nouveau = None
         else:
             if heures_mode:
-                self.lbl_calc.configure(text=f"h  ×  {calcul.formater_argent(self.taux)}  =  "
-                                             f"{calcul.formater_argent(montant)}")
+                self.lbl_calc.configure(text=calcul.masquer(f"h  ×  {calcul.formater_argent(self.taux)}  =  "
+                                                     f"{calcul.formater_argent(montant)}", self.parent.confidentiel))
             else:
                 self.lbl_calc.configure(text="$")
             nouveau = solde - montant
-        self.lbl_recap[0].configure(text=calcul.formater_argent(solde))
-        self.lbl_recap[1].configure(text=calcul.formater_argent(-montant) if montant is not None else "—")
+        c = self.parent.confidentiel
+        self.lbl_recap[0].configure(text=calcul.masquer(calcul.formater_argent(solde), c))
+        self.lbl_recap[1].configure(text=calcul.masquer(calcul.formater_argent(-montant), c) if montant is not None else "—")
         if nouveau is None:
             self.lbl_recap[2].configure(text="—")
             self.lbl_alerte.configure(text="")
@@ -618,7 +624,7 @@ class DialogueVacances(Dialogue):
             txt = calcul.formater_argent(nouveau)
             if self.parent.base.taux > 0:
                 txt += f"  (≈ {calcul.formater_nombre(nouveau / self.parent.base.taux)} h)"
-            self.lbl_recap[2].configure(text=txt)
+            self.lbl_recap[2].configure(text=calcul.masquer(txt, c))
             self.lbl_alerte.configure(text="Attention : le solde deviendra négatif." if nouveau < 0 else "")
 
     def valider(self):
@@ -691,6 +697,8 @@ class Application(tk.Tk):
     def _demarrer(self, vient_d_installer=False):
         self._construire()
         self._appliquer_affichage(demarrage=True)
+        self._titre()
+        self.entree_heures.configure(show="•" if self.confidentiel else "")
         self.rafraichir()
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
@@ -934,7 +942,8 @@ class Application(tk.Tk):
 
         def remplir_outils():
             outils.delete(0, "end")
-            outils.add_command(label=f"Pourcentage de vacances ({calcul.formater_simple(self.base.pct)} %)…",
+            outils.add_command(label=calcul.masquer(f"Pourcentage de vacances ({calcul.formater_simple(self.base.pct)} %)…",
+                                                    self.confidentiel),
                                command=self.ouvrir_pourcentage)
             outils.add_command(label="Paramètres…", command=self.ouvrir_parametres)
             outils.add_cascade(label="Affichage", menu=affichage)
@@ -953,6 +962,9 @@ class Application(tk.Tk):
 
         fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
         fichier.add_separator()
+        self.var_confidentiel = tk.BooleanVar(value=self.confidentiel)
+        fichier.add_checkbutton(label="Confidentiel (cacher les chiffres)", variable=self.var_confidentiel,
+                                command=self._appliquer_confidentiel)
         fichier.add_cascade(label="Outils", menu=outils)
         fichier.add_separator()
         fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
@@ -966,6 +978,20 @@ class Application(tk.Tk):
         self.configure(menu=barre)
         self.bind_all("<Control-d>", lambda _e: self.deduire_vacances())
         self.bind_all("<Control-D>", lambda _e: self.deduire_vacances())
+
+    @property
+    def confidentiel(self):
+        return self.base.preference("confidentiel", False)
+
+    def _appliquer_confidentiel(self):
+        self.base.definir_preference("confidentiel", self.var_confidentiel.get())
+        self._titre()
+        self.entree_heures.configure(show="•" if self.confidentiel else "")
+        self.rafraichir()
+        self._verifier_releve()
+
+    def _titre(self):
+        self.title(f"Calculateur de vacances v{__version__}" + ("  —  Confidentiel" if self.confidentiel else ""))
 
     def _appliquer_affichage(self, demarrage=False):
         soldes, hist = self.var_voir_soldes.get(), self.var_voir_hist.get()
@@ -1008,17 +1034,18 @@ class Application(tk.Tk):
         depart = next((e for e in entrees if e.type == "depart"), None)
         premiere = entrees[0].debut if entrees else None
 
-        self.t_accumule[0].configure(text=calcul.formater_argent(t.accumule))
+        c = self.confidentiel
+        self.t_accumule[0].configure(text=calcul.masquer(calcul.formater_argent(t.accumule), c))
         if premiere:
             info = f"depuis le {premiere.isoformat()}" + (" (incl. solde de départ)" if depart else "")
         else:
             info = "aucune période inscrite"
-        info = f"{self._heures(t.accumule_heures)}\n{info}"
+        info = f"{calcul.masquer(self._heures(t.accumule_heures), c)}\n{info}"
         self.t_accumule[1].configure(text=info)
-        self.t_pris[0].configure(text=calcul.formater_argent(-t.pris) if t.pris else calcul.formater_argent(0))
-        self.t_pris[1].configure(text=f"{calcul.formater_nombre(t.heures_prises)} h")
-        self.t_solde[0].configure(text=calcul.formater_argent(t.solde))
-        self.t_solde[1].configure(text=self._heures(t.solde_heures))
+        self.t_pris[0].configure(text=calcul.masquer(calcul.formater_argent(-t.pris) if t.pris else calcul.formater_argent(0), c))
+        self.t_pris[1].configure(text=calcul.masquer(f"{calcul.formater_nombre(t.heures_prises)} h", c))
+        self.t_solde[0].configure(text=calcul.masquer(calcul.formater_argent(t.solde), c))
+        self.t_solde[1].configure(text=calcul.masquer(self._heures(t.solde_heures), c))
 
         self.arbre.delete(*self.arbre.get_children())
         for e in reversed(entrees):
@@ -1026,8 +1053,8 @@ class Application(tk.Tk):
             libelle = LIBELLES_TYPE[e.type] + (f" — {e.note}" if e.note else "")
             montant = calcul.formater_argent(e.montant) if e.type == "depart" else calcul.formater_signe(e.montant)
             self.arbre.insert("", "end", iid=str(e.id), tags=(e.type,),
-                              values=(_date_courte(e), libelle, heures, montant, calcul.formater_argent(e.solde),
-                                      "PDF" if e.releve else ""))
+                              values=(_date_courte(e), libelle, calcul.masquer(heures, c), calcul.masquer(montant, c),
+                                      calcul.masquer(calcul.formater_argent(e.solde), c), "PDF" if e.releve else ""))
         self._apercu_periode()
 
     @staticmethod
@@ -1058,19 +1085,21 @@ class Application(tk.Tk):
         except ValueError:
             heures = None
         taux, pct = self._taux_releve(heures) or self.base.taux, self.base.pct
+        c = self.confidentiel
         h = calcul.formater_simple(heures) if heures is not None else "…"
-        self.lbl_formule.configure(text=f"{h} h × {calcul.formater_argent(taux)} × {calcul.formater_simple(pct)} %")
+        self.lbl_formule.configure(
+            text=calcul.masquer(f"{h} h × {calcul.formater_argent(taux)} × {calcul.formater_simple(pct)} %", c))
         if heures is None:
             self.lbl_resultat.configure(text="—")
             self.lbl_nouveau_solde.configure(text="Entre les heures de la période")
             return
         montant = calcul.vacances_periode(heures, taux, pct)
-        self.lbl_resultat.configure(text=calcul.formater_signe(montant))
+        self.lbl_resultat.configure(text=calcul.masquer(calcul.formater_signe(montant), c))
         solde = self.base.totaux().solde + montant
         txt = f"Nouveau solde : {calcul.formater_argent(solde)}"
         if taux > 0:
             txt += f"\n≈ {calcul.formater_nombre(solde / taux)} h"
-        self.lbl_nouveau_solde.configure(text=txt)
+        self.lbl_nouveau_solde.configure(text=calcul.masquer(txt, c))
 
     # --- Actions ------------------------------------------------------------
 
@@ -1126,11 +1155,12 @@ class Application(tk.Tk):
         if v.statut == "ok":
             self.lbl_verif.pack_forget()
         else:
-            self.lbl_verif.configure(text=prefixe + v.message, fg=couleur)
+            self.lbl_verif.configure(text=prefixe + calcul.masquer(v.message, self.confidentiel), fg=couleur)
             self.lbl_verif.pack(side="left", fill="x", expand=True, pady=(8, 0))
         if v.suggestion is not None and v.suggestion != heures:
             self._suggestion = v.suggestion
-            self.btn_suggestion.configure(text=f"Utiliser {calcul.formater_nombre(v.suggestion)} h")
+            self.btn_suggestion.configure(
+                text=calcul.masquer(f"Utiliser {calcul.formater_nombre(v.suggestion)} h", self.confidentiel))
             self.btn_suggestion.pack(side="right", pady=(8, 0), padx=(8, 0))
 
 

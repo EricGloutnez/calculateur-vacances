@@ -10,6 +10,7 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - L'historique montre le solde cumulé ligne par ligne. Double-clic pour modifier, Suppr pour effacer.
 - Optionnel : un **mot de passe** demandé à l'ouverture (Paramètres → Mot de passe à l'ouverture).
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
+- **Fichier → Confidentiel** cache tous les chiffres (pour une démonstration).
 - **Fichier → Outils → Affichage** permet de masquer ou d'afficher les soldes et l'historique.
 - Les dates se tapent (AAAA-MM-JJ) ou se choisissent dans un **calendrier**.
 - Le relevé PDF joint est **lu pour contre-vérifier les heures** (et les dates) de la période ;

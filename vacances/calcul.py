@@ -1,6 +1,7 @@
 """Calculs et formatage (montants en Decimal, arrondis au cent)."""
 
 import datetime as dt
+import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 CENT = Decimal("0.01")
@@ -84,3 +85,11 @@ def formater_simple(d):
 def prochaine_periode(debut, fin, jours=DUREE_PERIODE_JOURS):
     delta = dt.timedelta(days=jours)
     return debut + delta, fin + delta
+
+
+CHIFFRES = re.compile(r"\d(?:[\d\u00a0 ,.]*\d)?")
+
+
+def masquer(texte, actif):
+    """Mode confidentiel : chaque nombre devient « ••• » (pour une démonstration)."""
+    return CHIFFRES.sub("•••", texte) if actif else texte
