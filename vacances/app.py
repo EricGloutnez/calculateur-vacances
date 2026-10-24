@@ -29,6 +29,14 @@ BORD = "#E1E4E2"
 
 POLICE = "Segoe UI"
 
+# Petites icônes PNG (16-18 px) intégrées au code.
+CRAYON = (
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAB2klEQVR4nJWSP2tTURiHn/eck4Y02GpuVBA/QTcpQRS5N2JLHWIhQr5C6O7mkq/g4qB179AhKjgUFXsrDgqRLHXsIA4OTa2iDcm997wujVb6x/SdDgee53d+hxdOM1HkADkVc2DkmPP4YLlevX/hztWLALQw45miyFGt+nL3zUNTLCz5/vB95uzCt9VX3wE5WTA7m6PTSUqLN+ZcPv8yS5I949ykptnmMDcIf8ws7JoTkzudJKiFFeNyKz7NhsbaSbEG0I+F3TOD4ytEkSOO06AWVmTCrqF6VpwVP0xWxMiH7Xb8YPQ/7v+wnxbnxKfZcu/ZRnMEAgqoGQM2Ps2We+31Jo2G3d8FPfzsVssABLWwUr57c6dcj7LzjVsa1KuPAWg07FGVRxcG8Odq4TU7YV+gOi3O/pu8uuqPSjb7Zi3Vw3mbt6/xfkpy1vgke9JrrzeJIsfMjB4IlAPBOLa2DJCJl5rJu4Iajw7TR72n8RIAcZwSx4cr/zG2Wubyp7V8P8m/MzlbJPXdDL2XeX4C2EHfQwnY+UsFJXa+9PeI41QAgsXrl8TkPgN7qvoLkSn0uDVXL84ZkuT29vO3Gw6gd2X+a9BdnxMjRUStIBnqFdXDEhHFeBmYiU2A31O/xVXfTyVIAAAAAElFTkSuQmCC"
+)
+TROMBONE = (
+    "iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAACeUlEQVR4nI2Uz2sTQRTHv29msknaiArSf0APNhZBawVP8dDSJG3STWUrQsFDQQS9CPWc5qo9KkWPUi/dCqEmGEHPeigUPQRBD15aBA8epDHZnZ3nIT9I7Kb4ve2b4TPft2++A4QolUqp/6n1i4bUeNqZPmkhfo0CIdDSH6rV6q/uWhhI9H8Ui0UBgNMLuZWoGd2PR0fexEZiVcTUQcbO3wXAnT3DHTmOI13XNVk7l48nRsrNZusLa/PSwLBU6lY8HrvQaBzenJq4vF2v18l13aAf1Os7mUwyAIagR17LPwh8fV9a6qmEsHTLv9MU9BwsHpdKpa2OgYE2u44kgCBj5+aVFXnt+35ZSXGOiM4w0DCGPTbmq1JqRutg9erFSxtra2tMRD2QAIBUKkUAQEQrgdZNEO/G4vEJ3+jbFbd8Vkl5HgStA/1eCHpSqVRkB0IDoK6Y+RAAgdEwxjC1ncIYw2TQAADD5ncikTgyucEJEImOM4HBq0HcWQNIhgwNoaMMkQYQHLdhCIgYgCbR/pmWZSkCTrVhHAocABHAzMwAq4hlKQ44BgAtz1sn4AUYpwWJE2GggfwwoKSUMgjMD6/lbTFjHwBVt8sPAdDcDXvWGPN9bGwsNCY9Z+nC/FR+aZEz9vxmt55Op6MAkLFzm/mlxZ8zy8ujQC9O/d20VSwWRalUMulC7qNlRa54Wk/VXu3sAUDWtseVJfa0r7+ZP95krVbz8E94e9R6vU4ASCn5gEBSkdjNFPLPsoXchlD4TEJEDZt7tVqt5TjOkSENPCNdV7MLc9eVkutSRSYJgK/1p8DXq293qu+YmfqjcZx6p2Vtezzt5JPDDu7XX0akABzlZsjhAAAAAElFTkSuQmCC"
+)
+
 LIBELLES_TYPE = {"depart": "Solde de départ", "periode": "Période de paye", "vacances": "Vacances prises"}
 
 
@@ -258,29 +266,12 @@ class DialogueParametres(Dialogue):
             self._maj_mdp()
 
     def _exporter(self):
-        nom = f"vacances-sauvegarde-{dt.date.today().isoformat()}.db"
-        chemin = filedialog.asksaveasfilename(parent=self, title="Exporter une sauvegarde", initialfile=nom,
-                                              defaultextension=".db", filetypes=[("Sauvegarde", "*.db")])
-        if chemin:
-            self.parent.base.exporter(chemin)
-            messagebox.showinfo("Sauvegarde", "Sauvegarde exportée.", parent=self)
+        self.parent.exporter_sauvegarde(parent=self)
 
     def _importer(self):
-        chemin = filedialog.askopenfilename(parent=self, title="Importer une sauvegarde",
-                                            filetypes=[("Sauvegarde", "*.db"), ("Tous les fichiers", "*.*")])
-        if not chemin:
-            return
-        if not messagebox.askyesno("Importer", "Remplacer toutes les données actuelles par cette sauvegarde ?",
-                                   icon="warning", parent=self):
-            return
-        try:
-            self.parent.base.importer(chemin)
-        except Exception as err:  # fichier corrompu, mauvais format…
-            messagebox.showerror("Importer", f"Import impossible : {err}", parent=self)
-            return
-        self.parent.rafraichir()
-        self.destroy()
-        messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self.parent)
+        if self.parent.importer_sauvegarde(parent=self):
+            self.destroy()
+            messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self.parent)
 
 
 class DialogueMotDePasse(Dialogue):
@@ -478,8 +469,8 @@ class Application(tk.Tk):
         self.release = None
         self._file_maj = queue.Queue()
         self.title(f"Calculateur de vacances v{__version__}")
-        self.geometry("1040x740")
-        self.minsize(900, 620)
+        self.geometry(f"1060x{min(820, self.winfo_screenheight() - 80)}")
+        self.minsize(900, 640)
         self.configure(bg=FOND)
         icone = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) / "icone.ico"
         if sys.platform == "win32" and icone.exists():
@@ -561,7 +552,9 @@ class Application(tk.Tk):
         s.configure("Recap.TLabel", background=FOND)
         s.configure("Alerte.TLabel", background=BLANC, foreground=ROUGE, font=(POLICE, 9, "bold"))
         s.configure("Calcul.TLabel", background=BLANC, foreground=GRIS)
-        s.configure("CalculMontant.TLabel", background=BLANC, foreground=VERT, font=(POLICE, 14, "bold"))
+        s.configure("Pilule.TButton", background=VERT_PALE, foreground=VERT_FONCE, bordercolor="#C3DED4",
+                    padding=(14, 7), font=(POLICE, 10))
+        s.map("Pilule.TButton", background=[("active", VERT_TEXTE_PALE)])
         for st in ("Carte.TCheckbutton", "Carte.TRadiobutton"):
             s.configure(st, background=BLANC)
             s.map(st, background=[("active", BLANC)])
@@ -590,56 +583,82 @@ class Application(tk.Tk):
                                   command=self.installer_maj)
         self.btn_maj.pack(side="right")
 
-        self.contenu = ttk.Frame(self, padding=24)
+        self._menus()
+        self.contenu = ttk.Frame(self, padding=(24, 18, 24, 24))
         self.contenu.pack(fill="both", expand=True)
         c = self.contenu
 
         entete = ttk.Frame(c)
         entete.pack(fill="x", pady=(0, 16))
         ttk.Label(entete, text="Mes vacances", style="Titre.TLabel").pack(side="left")
-        ttk.Button(entete, text="⚙  Paramètres", command=self.ouvrir_parametres).pack(side="right")
-        self.lbl_params = ttk.Label(entete, text="", style="Info.TLabel")
-        self.lbl_params.pack(side="right", padx=16)
+        self.img_crayon = tk.PhotoImage(data=CRAYON)
+        self.img_trombone = tk.PhotoImage(data=TROMBONE)
+        self.btn_params = ttk.Button(entete, image=self.img_crayon, compound="right", style="Pilule.TButton",
+                                     command=self.ouvrir_parametres)
+        self.btn_params.pack(side="right")
 
         # Tuiles de totaux
         tuiles = ttk.Frame(c)
-        tuiles.pack(fill="x", pady=(0, 16))
+        tuiles.pack(fill="x", pady=(0, 14))
         for i in range(3):
             tuiles.columnconfigure(i, weight=1, uniform="tuile")
         self.t_accumule = self._tuile(tuiles, 0, "TOTAL ACCUMULÉ", BLANC, TEXTE, GRIS)
         self.t_pris = self._tuile(tuiles, 1, "VACANCES PRISES", BLANC, ROUGE, GRIS)
         self.t_solde = self._tuile(tuiles, 2, "SOLDE DISPONIBLE", VERT, BLANC, VERT_TEXTE_PALE)
 
-        # Formulaire : nouvelle période
-        carte = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1, padx=18, pady=14)
-        carte.pack(fill="x", pady=(0, 16))
-        ttk.Label(carte, text="Ajouter une période de paye", style="SousTitre.TLabel").grid(
-            row=0, column=0, columnspan=7, sticky="w", pady=(0, 10))
+        # Formulaire : nouvelle période (champs à gauche, résultat en évidence à droite)
+        carte = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1)
+        carte.pack(fill="x")
+        droite = tk.Frame(carte, bg=VERT_PALE, padx=22, pady=16)
+        droite.pack(side="right", fill="y")
+        tk.Frame(droite, bg=VERT_PALE, width=250, height=0).pack()
+        tk.Label(droite, text="VACANCES GAGNÉES", bg=VERT_PALE, fg=VERT_FONCE, font=(POLICE, 9, "bold")).pack(
+            anchor="w")
+        self.lbl_resultat = tk.Label(droite, text="", bg=VERT_PALE, fg=VERT, font=(POLICE, 24, "bold"))
+        self.lbl_resultat.pack(anchor="w")
+        self.lbl_formule = tk.Label(droite, text="", bg=VERT_PALE, fg="#2E3632", font=(POLICE, 10))
+        self.lbl_formule.pack(anchor="w")
+        self.lbl_nouveau_solde = tk.Label(droite, text="", bg=VERT_PALE, fg="#2E3632", font=(POLICE, 10),
+                                          justify="left")
+        self.lbl_nouveau_solde.pack(anchor="w", pady=(2, 12))
+        ttk.Button(droite, text="Ajouter la période", style="Primaire.TButton", command=self.ajouter_periode).pack(
+            side="bottom", fill="x", ipady=4)
+
+        gauche = tk.Frame(carte, bg=BLANC, padx=22, pady=16)
+        gauche.pack(side="left", fill="both", expand=True)
+        titre = ttk.Frame(gauche, style="Carte.TFrame")
+        titre.pack(fill="x", pady=(0, 12))
+        ttk.Label(titre, text="Nouvelle période de paye", style="SousTitre.TLabel").pack(side="left")
+        ttk.Label(titre, text="Dates remplies automatiquement (+14 jours)", style="Aide.TLabel").pack(side="right")
+
+        champs = ttk.Frame(gauche, style="Carte.TFrame")
+        champs.pack(fill="x")
         self.var_debut = tk.StringVar()
         self.var_fin = tk.StringVar()
         self.var_heures = tk.StringVar()
-        for col, (txt, var, larg) in enumerate((("Début", self.var_debut, 12), ("Fin", self.var_fin, 12),
-                                                 ("Heures travaillées", self.var_heures, 10))):
-            ttk.Label(carte, text=txt, style="Aide.TLabel").grid(row=1, column=col, sticky="w", padx=(0, 14))
-            e = ttk.Entry(carte, textvariable=var, width=larg, font=(POLICE, 11, "bold" if col == 2 else "normal"))
-            e.grid(row=2, column=col, sticky="w", padx=(0, 14))
+        for col, (txt, var) in enumerate((("Début", self.var_debut), ("Fin", self.var_fin),
+                                          ("Heures travaillées", self.var_heures))):
+            champs.columnconfigure(col, weight=1, uniform="champ")
+            ttk.Label(champs, text=txt, style="Champ.TLabel").grid(row=0, column=col, sticky="w", padx=(0, 14),
+                                                                   pady=(0, 4))
+            e = ttk.Entry(champs, textvariable=var, font=(POLICE, 12, "bold" if col == 2 else "normal"))
+            e.grid(row=1, column=col, sticky="we", padx=(0, 14 if col < 2 else 0), ipady=3)
             e.bind("<Return>", lambda _e: self.ajouter_periode())
             if col == 2:
                 self.entree_heures = e
-        apercu = ttk.Frame(carte, style="Carte.TFrame")
-        apercu.grid(row=3, column=0, columnspan=3, sticky="w", pady=(12, 0))
-        ttk.Label(apercu, text="Vacances pour la période :", style="Calcul.TLabel").pack(side="left", padx=(0, 8))
-        self.lbl_formule = ttk.Label(apercu, text="", style="Calcul.TLabel")
-        self.lbl_formule.pack(side="left")
-        self.lbl_resultat = ttk.Label(apercu, text="", style="CalculMontant.TLabel")
-        self.lbl_resultat.pack(side="left", padx=(6, 0))
-        carte.columnconfigure(3, weight=1)
-        ttk.Button(carte, text="+  Ajouter", style="Primaire.TButton", command=self.ajouter_periode).grid(
-            row=2, column=4, padx=(14, 8))
-        ttk.Button(carte, text="−  Déduire des vacances", style="Danger.TButton",
-                   command=self.deduire_vacances).grid(row=2, column=5)
-        self.releve_periode = ChoixReleve(carte)
-        self.releve_periode.grid(row=3, column=3, columnspan=3, sticky="e", pady=(12, 0))
+
+        zone = tk.Frame(gauche, bg=BLANC, highlightbackground="#C8CDCA", highlightcolor="#C8CDCA",
+                        highlightthickness=1, padx=12, pady=8)
+        zone.pack(fill="x", pady=(16, 0))
+        tk.Label(zone, image=self.img_trombone, bg=BLANC).pack(side="left")
+        ttk.Label(zone, text="Relevé de paye (PDF, optionnel)", style="Aide.TLabel").pack(side="left", padx=(8, 0))
+        self.releve_periode = ChoixReleve(zone)
+        self.releve_periode.pack(side="right")
+
+        bas = ttk.Frame(c)
+        bas.pack(fill="x", pady=(10, 14))
+        ttk.Button(bas, text="−  J'ai pris des vacances", style="Danger.TButton",
+                   command=self.deduire_vacances).pack(side="right")
         self.var_heures.trace_add("write", lambda *_: self._apercu_periode())
 
         # Historique
@@ -692,6 +711,40 @@ class Application(tk.Tk):
             menu.tk_popup(ev.x_root, ev.y_root)
         self.arbre.bind("<Button-3>", menu_contextuel)
 
+    def _menus(self):
+        barre = tk.Menu(self)
+        fichier = tk.Menu(barre, tearoff=False)
+        fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
+        fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
+        fichier.add_separator()
+        fichier.add_command(label="Quitter", command=self.destroy)
+        barre.add_cascade(label="Fichier", menu=fichier)
+
+        outils = tk.Menu(barre, tearoff=False)
+
+        def remplir_outils():
+            outils.delete(0, "end")
+            outils.add_command(label="Paramètres…", command=self.ouvrir_parametres)
+            outils.add_separator()
+            if self.base.a_mot_de_passe:
+                outils.add_command(label="Changer le mot de passe…", command=lambda: self.mot_de_passe(False))
+                outils.add_command(label="Retirer le mot de passe…", command=lambda: self.mot_de_passe(True))
+            else:
+                outils.add_command(label="Définir un mot de passe…", command=lambda: self.mot_de_passe(False))
+        outils.configure(postcommand=remplir_outils)
+        remplir_outils()
+        barre.add_cascade(label="Outils", menu=outils)
+
+        aide = tk.Menu(barre, tearoff=False)
+        aide.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
+        aide.add_command(label="Page GitHub de l'application", command=lambda: webbrowser.open(updater.URL_PAGE))
+        aide.add_separator()
+        aide.add_command(label="À propos", command=lambda: messagebox.showinfo(
+            "À propos", f"Calculateur de vacances\nVersion {__version__}\n\nDonnées : {self.base.chemin}",
+            parent=self))
+        barre.add_cascade(label="Aide", menu=aide)
+        self.configure(menu=barre)
+
     def _tuile(self, parent, col, titre, fond, couleur_valeur, couleur_info):
         cadre = tk.Frame(parent, bg=fond, padx=18, pady=14,
                          highlightbackground=BORD if fond == BLANC else fond,
@@ -708,8 +761,8 @@ class Application(tk.Tk):
 
     def rafraichir(self):
         base = self.base
-        self.lbl_params.configure(
-            text=f"Taux : {calcul.formater_argent(base.taux)}/h  ·  Vacances : {calcul.formater_simple(base.pct)} %")
+        self.btn_params.configure(
+            text=f"{calcul.formater_argent(base.taux)}/h  ·  {calcul.formater_simple(base.pct)} %     │     Modifier ")
         t = base.totaux()
         entrees = base.entrees()
         depart = next((e for e in entrees if e.type == "depart"), None)
@@ -762,9 +815,18 @@ class Application(tk.Tk):
         except ValueError:
             heures = None
         h = calcul.formater_simple(heures) if heures is not None else "…"
-        self.lbl_formule.configure(text=f"{h} h × {calcul.formater_argent(taux)} × {calcul.formater_simple(pct)} % =")
-        self.lbl_resultat.configure(
-            text=calcul.formater_argent(calcul.vacances_periode(heures, taux, pct)) if heures is not None else "—")
+        self.lbl_formule.configure(text=f"{h} h × {calcul.formater_argent(taux)} × {calcul.formater_simple(pct)} %")
+        if heures is None:
+            self.lbl_resultat.configure(text="—")
+            self.lbl_nouveau_solde.configure(text="Entre les heures de la période")
+            return
+        montant = calcul.vacances_periode(heures, taux, pct)
+        self.lbl_resultat.configure(text=calcul.formater_signe(montant))
+        solde = self.base.totaux().solde + montant
+        txt = f"Nouveau solde : {calcul.formater_argent(solde)}"
+        if taux > 0:
+            txt += f"\n≈ {calcul.formater_nombre(solde / taux)} h"
+        self.lbl_nouveau_solde.configure(text=txt)
 
     # --- Actions ------------------------------------------------------------
 
@@ -787,6 +849,41 @@ class Application(tk.Tk):
             return
         self.rafraichir()
         self._preremplir_periode()
+
+    def mot_de_passe(self, retirer):
+        DialogueMotDePasse(self, self.base, retirer)
+
+    def exporter_sauvegarde(self, parent=None):
+        parent = parent or self
+        nom = f"vacances-sauvegarde-{dt.date.today().isoformat()}.db"
+        chemin = filedialog.asksaveasfilename(parent=parent, title="Exporter une sauvegarde", initialfile=nom,
+                                              defaultextension=".db", filetypes=[("Sauvegarde", "*.db")])
+        if chemin:
+            self.base.exporter(chemin)
+            messagebox.showinfo("Sauvegarde", "Sauvegarde exportée.", parent=parent)
+
+    def importer_sauvegarde(self, parent=None):
+        """Remplace les données par une sauvegarde ; True si l'import a eu lieu."""
+        parent = parent or self
+        chemin = filedialog.askopenfilename(parent=parent, title="Importer une sauvegarde",
+                                            filetypes=[("Sauvegarde", "*.db"), ("Tous les fichiers", "*.*")])
+        if not chemin:
+            return False
+        if not messagebox.askyesno("Importer", "Remplacer toutes les données actuelles par cette sauvegarde ?",
+                                   icon="warning", parent=parent):
+            return False
+        try:
+            self.base.importer(chemin)
+        except Exception as err:  # fichier corrompu, mauvais format…
+            messagebox.showerror("Importer", f"Import impossible : {err}", parent=parent)
+            return False
+        self.rafraichir()
+        self._preremplir_periode()
+        return True
+
+    def _importer_depuis_menu(self):
+        if self.importer_sauvegarde():
+            messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self)
 
     def deduire_vacances(self):
         DialogueVacances(self)
