@@ -673,7 +673,7 @@ class Application(tk.Tk):
         self.base = base
         self.release = None
         self._file_maj = queue.Queue()
-        self.title(f"Calculateur de vacances v{__version__}")
+        self.title("Calculateur de vacances")
         self.geometry(f"1060x{min(820, self.winfo_screenheight() - 80)}")
         self.minsize(900, 640)
         self.configure(bg=FOND)
@@ -779,7 +779,10 @@ class Application(tk.Tk):
 
     def _construire(self):
         self._menus()
-        self.contenu = ttk.Frame(self, padding=(24, 18, 24, 24))
+        # Numéro de version en bas à gauche
+        tk.Label(self, text=f"Version : {__version__}", bg=FOND, fg=GRIS, font=(POLICE, 9), anchor="w",
+                 padx=24, pady=6).pack(side="bottom", fill="x")
+        self.contenu = ttk.Frame(self, padding=(24, 18, 24, 4))
         self.contenu.pack(fill="both", expand=True)
         c = self.contenu
 
@@ -978,7 +981,7 @@ class Application(tk.Tk):
         self._verifier_releve()
 
     def _titre(self):
-        self.title(f"Calculateur de vacances v{__version__}" + ("  —  Confidentiel" if self.confidentiel else ""))
+        self.title("Calculateur de vacances" + ("  —  Confidentiel" if self.confidentiel else ""))
 
     def _appliquer_affichage(self, demarrage=False):
         soldes, hist = self.var_voir_soldes.get(), self.var_voir_hist.get()
@@ -1345,7 +1348,7 @@ class Application(tk.Tk):
             while True:
                 genre, valeur = self._file_maj.get_nowait()
                 if genre == "trouvee":
-                    self.title(f"Calculateur de vacances v{__version__}  —  installation de la version "
+                    self.title(f"Calculateur de vacances  —  installation de la version "
                                f"{valeur.version}…")
                 elif genre == "telecharge":
                     updater.lancer_remplacement(valeur)
