@@ -117,3 +117,9 @@ def test_rapport_de_paye():
     assert v.statut == "attention" and v.periode == (D(2026, 9, 24), D(2026, 10, 7))
     v = releve.verifier(a, Decimal(68), D(2026, 9, 24), D(2026, 10, 7), taux=Decimal(25))
     assert v.statut == "attention" and "62,50" in v.message
+
+
+def test_taux_du_releve():
+    a = releve.analyser_texte(RAPPORT_DE_PAYE)
+    assert a.taux(Decimal(68)) == Decimal("62.5000")
+    assert a.taux(None) is None

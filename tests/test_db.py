@@ -209,3 +209,16 @@ def test_premier_lancement(base):
     assert not base.premier_lancement_fait
     base.marquer_premier_lancement()
     assert base.premier_lancement_fait
+
+
+def test_periode_avec_taux_du_releve(base):
+    id_ = base.ajouter_periode(D(2026, 9, 24), D(2026, 10, 7), Decimal(68), taux=Decimal("62.5"))
+    e = base.entree(id_)
+    assert e.taux == Decimal("62.5") and e.montant == Decimal("170.00")
+    assert base.taux == Decimal(25)  # les paramètres ne changent pas d'eux-mêmes
+
+
+def test_preferences(base):
+    assert base.preference("historique") is True
+    base.definir_preference("historique", False)
+    assert base.preference("historique") is False

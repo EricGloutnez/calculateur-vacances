@@ -41,6 +41,12 @@ class Analyse:
     dates: set = field(default_factory=set)
     gains: Decimal | None = None  # salaire brut de la période
 
+    def taux(self, heures):
+        """Taux horaire selon le relevé : brut ÷ heures."""
+        if self.gains and heures and Decimal(heures) > 0:
+            return (self.gains / Decimal(heures)).quantize(Decimal("0.0001"))
+        return None
+
     @property
     def periode(self):
         """(début, fin) : les deux premières dates du relevé, si elles forment une période de paye."""

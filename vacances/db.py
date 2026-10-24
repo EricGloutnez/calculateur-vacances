@@ -155,6 +155,13 @@ class Base:
     def version_installee(self, valeur):
         self._set_param("version_installee", valeur)
 
+    def preference(self, cle, defaut=True):
+        """Préférence d'affichage oui/non (ex. afficher l'historique)."""
+        return self._param(f"pref_{cle}", "1" if defaut else "0") == "1"
+
+    def definir_preference(self, cle, valeur):
+        self._set_param(f"pref_{cle}", "1" if valeur else "0")
+
     @property
     def premier_lancement_fait(self):
         return self._param("premier_lancement_fait") == "1"
@@ -194,10 +201,11 @@ class Base:
 
     # --- Entrées ----------------------------------------------------------
 
-    def ajouter_periode(self, debut, fin, heures):
+    def ajouter_periode(self, debut, fin, heures, taux=None):
+        """Ajoute une période ; `taux` : celui lu dans le relevé de paye, sinon celui des paramètres."""
         heures = Decimal(heures)
         self._valider_periode(debut, fin, heures)
-        taux, pct = self.taux, self.pct
+        taux, pct = (Decimal(taux) if taux is not None else self.taux), self.pct
         montant = calcul.vacances_periode(heures, taux, pct)
         cur = self.conn.execute(
             "INSERT INTO entrees (type, date_debut, date_fin, heures, taux, pct, montant_cents) "

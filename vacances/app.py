@@ -31,9 +31,6 @@ BORD = "#E1E4E2"
 POLICE = "Segoe UI"
 
 # Petites icônes PNG (16-18 px) intégrées au code.
-CRAYON = (
-    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAB2klEQVR4nJWSP2tTURiHn/eck4Y02GpuVBA/QTcpQRS5N2JLHWIhQr5C6O7mkq/g4qB179AhKjgUFXsrDgqRLHXsIA4OTa2iDcm997wujVb6x/SdDgee53d+hxdOM1HkADkVc2DkmPP4YLlevX/hztWLALQw45miyFGt+nL3zUNTLCz5/vB95uzCt9VX3wE5WTA7m6PTSUqLN+ZcPv8yS5I949ykptnmMDcIf8ws7JoTkzudJKiFFeNyKz7NhsbaSbEG0I+F3TOD4ytEkSOO06AWVmTCrqF6VpwVP0xWxMiH7Xb8YPQ/7v+wnxbnxKfZcu/ZRnMEAgqoGQM2Ps2We+31Jo2G3d8FPfzsVssABLWwUr57c6dcj7LzjVsa1KuPAWg07FGVRxcG8Odq4TU7YV+gOi3O/pu8uuqPSjb7Zi3Vw3mbt6/xfkpy1vgke9JrrzeJIsfMjB4IlAPBOLa2DJCJl5rJu4Iajw7TR72n8RIAcZwSx4cr/zG2Wubyp7V8P8m/MzlbJPXdDL2XeX4C2EHfQwnY+UsFJXa+9PeI41QAgsXrl8TkPgN7qvoLkSn0uDVXL84ZkuT29vO3Gw6gd2X+a9BdnxMjRUStIBnqFdXDEhHFeBmYiU2A31O/xVXfTyVIAAAAAElFTkSuQmCC"
-)
 CALENDRIER = (
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACR0lEQVR4nJ2SP2tUQRTFz5mZ93b37eaP9mIpiAEFU8awFgE1JkSMjYUgKhgQtLBRcEEQrPwCfoTFFIuIlQQLIRYiCIqV30CQ7J+3szNzLLKbBJPKAwdmbvG7514usCtOvLy8XCytLx1vtVoGANGCObK+a5gxQBOHjA9crP38vb2dARCfMx1VH3uXsnhrsTrlpxq2b4O3seVs9tAFnPDe94qicP1+P6QKn+3Va75nuzZ0Op0dBwD1PzMPXDV/MrQ+UKzHGBWob6hYdWNJVKwoVWOMitRXF6omOL8F4JrD7iAFDWchRZBGUiI5u78eAKQkJQDHaGgAzgCAG+8gSpJ1zhoSACwOiwCspMlvdBBglMQU41YatxynMJP3GGBIBpHzSsoPAlwIAe82O80jOh/SpWtXPwOoHwRYSb3La6sbtaJ6vRwMPv+ylWcnY9nO83xqWMa7YDrXaNQ3et3uR4oeRLZ/BwIleSDN1eq1poCLAOCsWynqRVPkjCFOFfV6E8AFEAEHD0lQJDlNZq+G3d55It783m6PUsDZwaA8P+3cj5Hsa++H84bpjqBivJe9EQigBMNCpFsR7JfT6+svFcvHSrZRlsNHxnEuhnAbMJ8oekFuLwHBKqBRijqT5/kqgAvf220v8EaeZ6sjaw2hk1mWr0paABEI1vYBxHvnslka3h8MBpC0cHnt6hdrTea9B5neknza7/UAcCmv5ItJ6c0kugGQrqytrNOaeynGJCADUADYISlBDQgBwMBamyGlD283Oy/+vbL/0l+kDBt2ia+H8AAAAABJRU5ErkJggg=="
 )
@@ -56,6 +53,60 @@ def _date_courte(e):
 
 def _abreger(nom, longueur=28):
     return nom if len(nom) <= longueur else nom[:longueur - 1] + "…"
+
+
+def arrondir_coins(fenetre):
+    """Coins arrondis et ombre (Windows 11) pour une fenêtre sans bordure ; sans effet ailleurs."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        fenetre.update_idletasks()
+        hwnd = int(fenetre.wm_frame(), 16)
+        preference = ctypes.c_int(2)  # DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(preference), ctypes.sizeof(preference))
+    except Exception:  # Windows 10 : coins carrés
+        pass
+
+
+class MenuContextuel(tk.Toplevel):
+    """Menu du clic droit aux coins arrondis.
+
+    `elements` : liste de (libellé, commande) ou (libellé, commande, "danger") ; None = séparateur.
+    """
+
+    def __init__(self, parent, elements, x, y):
+        super().__init__(parent)
+        self.parent = parent
+        self.overrideredirect(True)
+        self.configure(bg=BLANC if sys.platform == "win32" else BORD)
+        cadre = tk.Frame(self, bg=BLANC, padx=5, pady=5)
+        cadre.pack(padx=0 if sys.platform == "win32" else 1, pady=0 if sys.platform == "win32" else 1)
+        for element in elements:
+            if element is None:
+                tk.Frame(cadre, bg=BORD, height=1).pack(fill="x", padx=8, pady=4)
+                continue
+            libelle, commande, *option = element
+            couleur = ROUGE if option and option[0] == "danger" else TEXTE
+            ligne = tk.Label(cadre, text=libelle, bg=BLANC, fg=couleur, anchor="w", padx=14, pady=6,
+                             font=(POLICE, 10), cursor="hand2")
+            ligne.pack(fill="x")
+            ligne.bind("<Enter>", lambda _e, l=ligne: l.configure(bg=VERT_PALE))
+            ligne.bind("<Leave>", lambda _e, l=ligne: l.configure(bg=BLANC))
+            ligne.bind("<ButtonRelease-1>", lambda _e, c=commande: self._choisir(c))
+        self.update_idletasks()
+        largeur, hauteur = self.winfo_reqwidth(), self.winfo_reqheight()
+        x = min(x, self.winfo_screenwidth() - largeur - 4)
+        y = min(y, self.winfo_screenheight() - hauteur - 40)
+        self.geometry(f"+{x}+{y}")
+        arrondir_coins(self)
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<FocusOut>", lambda _e: self.destroy())
+        self.focus_force()
+
+    def _choisir(self, commande):
+        self.destroy()
+        self.parent.after_idle(commande)
 
 
 class ChoixReleve(ttk.Frame):
@@ -158,6 +209,7 @@ class ChampDate(ttk.Frame):
         self.cadre.pack(padx=1, pady=1)
         self._dessiner()
         self.popup.geometry(f"+{self.winfo_rootx()}+{self.winfo_rooty() + self.winfo_height() + 2}")
+        arrondir_coins(self.popup)
         self.popup.lift()
         fenetre = self.winfo_toplevel()
         self._liaisons = [(fenetre, "<Button-1>", fenetre.bind("<Button-1>", self._clic_ailleurs, add="+")),
@@ -404,6 +456,31 @@ class DialogueParametres(Dialogue):
             messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self.parent)
 
 
+class DialoguePourcentage(Dialogue):
+    titre = "Pourcentage de vacances"
+
+    def construire(self, c):
+        ttk.Label(c, text="Pourcentage de vacances (%)", style="Champ.TLabel").grid(row=0, column=0, sticky="w",
+                                                                                    pady=(0, 4))
+        ligne = ttk.Frame(c, style="Carte.TFrame")
+        ligne.grid(row=1, column=0, sticky="w", pady=(0, 8))
+        self.var_pct = tk.StringVar(value=calcul.formater_simple(self.parent.base.pct))
+        entree = ttk.Entry(ligne, textvariable=self.var_pct, width=8, font=(POLICE, 11))
+        entree.pack(side="left")
+        for p in ("4", "6", "8"):
+            ttk.Button(ligne, text=f"{p} %", width=5, command=lambda p=p: self.var_pct.set(p)).pack(side="left",
+                                                                                                padx=(8, 0))
+        ttk.Label(c, text="S'applique aux nouvelles périodes ajoutées.", style="Aide.TLabel").grid(
+            row=2, column=0, sticky="w")
+        entree.focus_set()
+        entree.select_range(0, "end")
+
+    def valider(self):
+        self.parent.base.pct = calcul.parse_nombre(self.var_pct.get())
+        self.parent.rafraichir()
+        return True
+
+
 class DialogueMotDePasse(Dialogue):
     def __init__(self, parent, base, retirer=False):
         self.base = base
@@ -613,6 +690,7 @@ class Application(tk.Tk):
 
     def _demarrer(self, vient_d_installer=False):
         self._construire()
+        self._appliquer_affichage(demarrage=True)
         self.rafraichir()
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
@@ -683,9 +761,6 @@ class Application(tk.Tk):
         s.configure("Alerte.TLabel", background=BLANC, foreground=ROUGE, font=(POLICE, 9, "bold"))
         s.configure("Calcul.TLabel", background=BLANC, foreground=GRIS)
         s.configure("Icone.TButton", padding=(6, 2), background=BLANC)
-        s.configure("Pilule.TButton", background=VERT_PALE, foreground=VERT_FONCE, bordercolor="#C3DED4",
-                    padding=(14, 7), font=(POLICE, 10))
-        s.map("Pilule.TButton", background=[("active", VERT_TEXTE_PALE)])
         for st in ("Carte.TCheckbutton", "Carte.TRadiobutton"):
             s.configure(st, background=BLANC)
             s.map(st, background=[("active", BLANC)])
@@ -719,17 +794,10 @@ class Application(tk.Tk):
         self.contenu.pack(fill="both", expand=True)
         c = self.contenu
 
-        entete = ttk.Frame(c)
-        entete.pack(fill="x", pady=(0, 16))
-        ttk.Label(entete, text="Mes vacances", style="Titre.TLabel").pack(side="left")
-        self.img_crayon = tk.PhotoImage(data=CRAYON)
         self.img_trombone = tk.PhotoImage(data=TROMBONE)
-        self.btn_params = ttk.Button(entete, image=self.img_crayon, compound="right", style="Pilule.TButton",
-                                     command=self.ouvrir_parametres)
-        self.btn_params.pack(side="right")
 
         # Tuiles de totaux
-        tuiles = ttk.Frame(c)
+        tuiles = self.cadre_soldes = ttk.Frame(c)
         tuiles.pack(fill="x", pady=(0, 14))
         for i in range(3):
             tuiles.columnconfigure(i, weight=1, uniform="tuile")
@@ -738,7 +806,8 @@ class Application(tk.Tk):
         self.t_solde = self._tuile(tuiles, 2, "SOLDE DISPONIBLE", VERT, BLANC, VERT_TEXTE_PALE)
 
         # Formulaire : nouvelle période (champs à gauche, résultat en évidence à droite)
-        carte = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1)
+        carte = self.carte_form = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD,
+                                           highlightthickness=1)
         carte.pack(fill="x", pady=(0, 14))
         droite = tk.Frame(carte, bg=VERT_PALE, padx=22, pady=16)
         droite.pack(side="right", fill="y")
@@ -805,13 +874,12 @@ class Application(tk.Tk):
         self.var_fin.trace_add("write", lambda *_: self._verifier_releve())
 
         # Historique
-        hist = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1)
+        hist = self.cadre_hist = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD,
+                                          highlightthickness=1)
         hist.pack(fill="both", expand=True)
         tete = ttk.Frame(hist, style="Carte.TFrame", padding=(18, 10))
         tete.pack(fill="x")
         ttk.Label(tete, text="Historique", style="SousTitre.TLabel").pack(side="left")
-        ttk.Label(tete, text="Double-clic pour modifier (sur « PDF » pour ouvrir le relevé) · "
-                             "Clic droit pour plus d'options", style="Aide.TLabel").pack(side="right")
 
         colonnes = ("date", "type", "heures", "montant", "solde", "releve")
         cadre_arbre = ttk.Frame(hist, style="Carte.TFrame")
@@ -838,20 +906,18 @@ class Application(tk.Tk):
                 return
             self.arbre.selection_set(ligne)
             e = self._entree_selectionnee()
-            menu = tk.Menu(self, tearoff=False)
-            menu.add_command(label="Modifier…", command=self.modifier_selection)
+            elements = [("Modifier…", self.modifier_selection)]
             if e and e.type != "depart":
-                menu.add_separator()
+                elements.append(None)
                 if e.releve:
-                    menu.add_command(label="Ouvrir le relevé", command=self.ouvrir_releve)
-                    menu.add_command(label="Enregistrer le relevé sous…", command=self.enregistrer_releve)
-                    menu.add_command(label="Remplacer le relevé…", command=self.joindre_releve)
-                    menu.add_command(label="Retirer le relevé", command=self.retirer_releve)
+                    elements += [("Ouvrir le relevé", self.ouvrir_releve),
+                                 ("Enregistrer le relevé sous…", self.enregistrer_releve),
+                                 ("Remplacer le relevé…", self.joindre_releve),
+                                 ("Retirer le relevé", self.retirer_releve)]
                 else:
-                    menu.add_command(label="Joindre un relevé PDF…", command=self.joindre_releve)
-            menu.add_separator()
-            menu.add_command(label="Supprimer", command=self.supprimer_selection)
-            menu.tk_popup(ev.x_root, ev.y_root)
+                    elements.append(("Joindre un relevé PDF…", self.joindre_releve))
+            elements += [None, ("Supprimer", self.supprimer_selection, "danger")]
+            MenuContextuel(self, elements, ev.x_root, ev.y_root)
         self.arbre.bind("<Button-3>", menu_contextuel)
 
     def _menus(self):
@@ -869,6 +935,8 @@ class Application(tk.Tk):
 
         def remplir_outils():
             outils.delete(0, "end")
+            outils.add_command(label=f"Pourcentage de vacances ({calcul.formater_simple(self.base.pct)} %)…",
+                               command=self.ouvrir_pourcentage)
             outils.add_command(label="Paramètres…", command=self.ouvrir_parametres)
             outils.add_separator()
             if self.base.a_mot_de_passe:
@@ -879,6 +947,14 @@ class Application(tk.Tk):
         outils.configure(postcommand=remplir_outils)
         remplir_outils()
         barre.add_cascade(label="Outils", menu=outils)
+
+        affichage = tk.Menu(barre, tearoff=False)
+        self.var_voir_soldes = tk.BooleanVar(value=self.base.preference("soldes"))
+        self.var_voir_hist = tk.BooleanVar(value=self.base.preference("historique"))
+        affichage.add_checkbutton(label="Soldes (total, vacances prises, solde)", variable=self.var_voir_soldes,
+                                  command=self._appliquer_affichage)
+        affichage.add_checkbutton(label="Historique", variable=self.var_voir_hist, command=self._appliquer_affichage)
+        barre.add_cascade(label="Affichage", menu=affichage)
 
         aide = tk.Menu(barre, tearoff=False)
         aide.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
@@ -891,6 +967,26 @@ class Application(tk.Tk):
         self.configure(menu=barre)
         self.bind_all("<Control-d>", lambda _e: self.deduire_vacances())
         self.bind_all("<Control-D>", lambda _e: self.deduire_vacances())
+
+    def _appliquer_affichage(self, demarrage=False):
+        soldes, hist = self.var_voir_soldes.get(), self.var_voir_hist.get()
+        self.base.definir_preference("soldes", soldes)
+        self.base.definir_preference("historique", hist)
+        self.cadre_soldes.pack_forget()
+        self.cadre_hist.pack_forget()
+        if soldes:
+            self.cadre_soldes.pack(fill="x", pady=(0, 14), before=self.carte_form)
+        if hist:
+            self.cadre_hist.pack(fill="both", expand=True)
+            self.minsize(900, 640)
+            if not demarrage and self.winfo_height() < 640:
+                self.geometry(f"{self.winfo_width()}x{min(820, self.winfo_screenheight() - 80)}")
+        else:
+            # Sans l'historique, la fenêtre se réduit à son contenu.
+            self.minsize(900, 1)
+            self.update_idletasks()
+            largeur = 1060 if demarrage else self.winfo_width()
+            self.geometry(f"{largeur}x{self.winfo_reqheight()}")
 
     def _tuile(self, parent, col, titre, fond, couleur_valeur, couleur_info):
         cadre = tk.Frame(parent, bg=fond, padx=18, pady=14,
@@ -908,8 +1004,6 @@ class Application(tk.Tk):
 
     def rafraichir(self):
         base = self.base
-        self.btn_params.configure(
-            text=f"{calcul.formater_argent(base.taux)}/h  ·  {calcul.formater_simple(base.pct)} %     │     Modifier ")
         t = base.totaux()
         entrees = base.entrees()
         depart = next((e for e in entrees if e.type == "depart"), None)
@@ -955,12 +1049,16 @@ class Application(tk.Tk):
         self.releve_periode.reinitialiser()
         self.entree_heures.focus_set()
 
+    def _taux_releve(self, heures):
+        analyse = getattr(self, "_analyse", None)
+        return analyse.taux(heures) if analyse and heures is not None else None
+
     def _apercu_periode(self):
-        taux, pct = self.base.taux, self.base.pct
         try:
             heures = calcul.parse_nombre(self.var_heures.get())
         except ValueError:
             heures = None
+        taux, pct = self._taux_releve(heures) or self.base.taux, self.base.pct
         h = calcul.formater_simple(heures) if heures is not None else "…"
         self.lbl_formule.configure(text=f"{h} h × {calcul.formater_argent(taux)} × {calcul.formater_simple(pct)} %")
         if heures is None:
@@ -992,12 +1090,12 @@ class Application(tk.Tk):
                 self._analyse = releve.analyser(contenu)
             except ValueError:
                 self._analyse = releve.Analyse(lisible=False)
-            # Les dates de la période viennent du relevé ; les heures aussi si elles sont vides.
+            # Les dates et les heures de la période viennent du relevé.
             if self._analyse.periode:
                 debut, fin = self._analyse.periode
                 self.var_debut.set(debut.isoformat())
                 self.var_fin.set(fin.isoformat())
-            if not self.var_heures.get().strip() and self._analyse.suggestion is not None:
+            if self._analyse.suggestion is not None:
                 self.var_heures.set(calcul.formater_simple(self._analyse.suggestion))
         self._verifier_releve()
 
@@ -1019,10 +1117,15 @@ class Application(tk.Tk):
                 dates.append(calcul.parse_date(var.get()))
             except ValueError:
                 dates.append(None)
-        v = releve.verifier(self._analyse, heures, *dates, taux=self.base.taux)
+        v = releve.verifier(self._analyse, heures, *dates)
         couleurs = {"ok": (VERT, "✓  "), "attention": (ROUGE, "⚠  "), "inconnu": (GRIS, "")}
         couleur, prefixe = couleurs[v.statut]
-        self.lbl_verif.configure(text=prefixe + v.message, fg=couleur)
+        texte = prefixe + v.message
+        taux = self._taux_releve(heures)
+        if taux:
+            texte += (f"\nTaux selon le relevé : {calcul.formater_argent(taux)}/h "
+                      f"({calcul.formater_argent(self._analyse.gains)} ÷ {calcul.formater_nombre(heures)} h)")
+        self.lbl_verif.configure(text=texte, fg=couleur)
         self.lbl_verif.pack(side="left", fill="x", expand=True, pady=(8, 0))
         if v.suggestion is not None and v.suggestion != heures:
             self._suggestion = v.suggestion
@@ -1036,14 +1139,15 @@ class Application(tk.Tk):
 
     def ajouter_periode(self):
         try:
-            if self.base.taux <= 0:
-                raise ValueError("Entre d'abord ton taux horaire dans les paramètres.")
             debut = calcul.parse_date(self.var_debut.get())
             fin = calcul.parse_date(self.var_fin.get())
             heures = calcul.parse_nombre(self.var_heures.get())
             pdf = self.releve_periode.lire()
+            taux = self._taux_releve(heures) if pdf else None
+            if taux is None and self.base.taux <= 0:
+                raise ValueError("Joins le relevé de paye, ou entre ton taux horaire dans Outils → Paramètres.")
             if pdf and self._analyse is not None:
-                v = releve.verifier(self._analyse, heures, debut, fin, taux=self.base.taux)
+                v = releve.verifier(self._analyse, heures, debut, fin)
                 if v.statut == "attention" and not messagebox.askyesno(
                         "Relevé de paye", f"{v.message}\n\nAjouter la période quand même ?", icon="warning",
                         parent=self):
@@ -1052,8 +1156,10 @@ class Application(tk.Tk):
                     "Période existante", f"Une période commençant le {debut.isoformat()} existe déjà.\n"
                                          "L'ajouter quand même ?", parent=self):
                 return
-            id_ = self.base.ajouter_periode(debut, fin, heures)
+            id_ = self.base.ajouter_periode(debut, fin, heures, taux=taux)
             self.releve_periode.appliquer(self.base, id_, pdf)
+            if taux:
+                self.base.taux = taux  # le dernier relevé donne le taux courant
         except ValueError as err:
             messagebox.showerror("Valeur invalide", str(err), parent=self)
             return
@@ -1107,6 +1213,9 @@ class Application(tk.Tk):
             parent=self)
         if not self.base.premier_lancement_fait:
             self._premier_lancement()
+
+    def ouvrir_pourcentage(self):
+        DialoguePourcentage(self)
 
     def ouvrir_parametres(self):
         DialogueParametres(self)

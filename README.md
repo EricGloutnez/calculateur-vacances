@@ -2,16 +2,18 @@
 
 Petite application Windows pour contre-vérifier ses vacances accumulées.
 
-- Entre ton **taux horaire** et ton **% de vacances** une seule fois (Paramètres).
+- Le **% de vacances** se règle dans **Outils → Pourcentage de vacances**. Le **taux horaire** est lu
+  dans le relevé de paye (brut ÷ heures) ; sans relevé, celui de Outils → Paramètres est utilisé.
 - À chaque paye, entre le **nombre d'heures** de la période : l'application affiche
   les vacances gagnées pour la période (`heures × taux × %`) et le **total cumulé**.
-- Quand tu prends des vacances, clique sur **Déduire des vacances** (en heures ou en $).
+- Quand tu prends des vacances : **Fichier → J'ai pris des vacances** (Ctrl+D), en heures ou en $.
 - L'historique montre le solde cumulé ligne par ligne. Double-clic pour modifier, Suppr pour effacer.
 - Optionnel : un **mot de passe** demandé à l'ouverture (Paramètres → Mot de passe à l'ouverture).
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
+- **Affichage** permet de masquer ou d'afficher les soldes et l'historique.
 - Les dates se tapent (AAAA-MM-JJ) ou se choisissent dans un **calendrier**.
 - Le relevé PDF joint est **lu pour contre-vérifier les heures** (et les dates) de la période ;
-  les dates de la période sont reprises du relevé, et les heures aussi si elles sont vides.
+  les dates, les heures et le taux de la période sont repris du relevé.
 - Tu peux **joindre le relevé de paye (PDF)** à une période ou à des vacances prises.
   Il est conservé dans la base de l'application ; clic droit sur la ligne pour l'ouvrir ou l'enregistrer.
 
