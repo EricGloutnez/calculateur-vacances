@@ -9,6 +9,9 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - L'historique montre le solde cumulé ligne par ligne. Double-clic pour modifier, Suppr pour effacer.
 - Optionnel : un **mot de passe** demandé à l'ouverture (Paramètres → Mot de passe à l'ouverture).
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
+- Les dates se tapent (AAAA-MM-JJ) ou se choisissent dans un **calendrier**.
+- Le relevé PDF joint est **lu pour contre-vérifier les heures** (et les dates) de la période ;
+  si les heures sont vides, elles sont remplies à partir du relevé.
 - Tu peux **joindre le relevé de paye (PDF)** à une période ou à des vacances prises.
   Il est conservé dans la base de l'application ; clic droit sur la ligne pour l'ouvrir ou l'enregistrer.
 
@@ -56,7 +59,7 @@ et publie la Release. Toutes les copies installées la proposeront au prochain d
 ## Développement
 
 ```powershell
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt   # inclut pypdf (lecture des relevés)
 python main.py          # lancer l'application
 python -m pytest        # tests
 ```

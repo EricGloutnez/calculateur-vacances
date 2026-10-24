@@ -1,5 +1,6 @@
 """Interface (Tkinter) du calculateur de vacances."""
 
+import calendar
 import datetime as dt
 import os
 import queue
@@ -13,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, calcul, installation, updater
+from . import __version__, calcul, installation, releve, updater
 from .db import Base
 
 VERT = "#1F6F5C"
@@ -33,6 +34,11 @@ POLICE = "Segoe UI"
 CRAYON = (
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAB2klEQVR4nJWSP2tTURiHn/eck4Y02GpuVBA/QTcpQRS5N2JLHWIhQr5C6O7mkq/g4qB179AhKjgUFXsrDgqRLHXsIA4OTa2iDcm997wujVb6x/SdDgee53d+hxdOM1HkADkVc2DkmPP4YLlevX/hztWLALQw45miyFGt+nL3zUNTLCz5/vB95uzCt9VX3wE5WTA7m6PTSUqLN+ZcPv8yS5I949ykptnmMDcIf8ws7JoTkzudJKiFFeNyKz7NhsbaSbEG0I+F3TOD4ytEkSOO06AWVmTCrqF6VpwVP0xWxMiH7Xb8YPQ/7v+wnxbnxKfZcu/ZRnMEAgqoGQM2Ps2We+31Jo2G3d8FPfzsVssABLWwUr57c6dcj7LzjVsa1KuPAWg07FGVRxcG8Odq4TU7YV+gOi3O/pu8uuqPSjb7Zi3Vw3mbt6/xfkpy1vgke9JrrzeJIsfMjB4IlAPBOLa2DJCJl5rJu4Iajw7TR72n8RIAcZwSx4cr/zG2Wubyp7V8P8m/MzlbJPXdDL2XeX4C2EHfQwnY+UsFJXa+9PeI41QAgsXrl8TkPgN7qvoLkSn0uDVXL84ZkuT29vO3Gw6gd2X+a9BdnxMjRUStIBnqFdXDEhHFeBmYiU2A31O/xVXfTyVIAAAAAElFTkSuQmCC"
 )
+CALENDRIER = (
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACR0lEQVR4nJ2SP2tUQRTFz5mZ93b37eaP9mIpiAEFU8awFgE1JkSMjYUgKhgQtLBRcEEQrPwCfoTFFIuIlQQLIRYiCIqV30CQ7J+3szNzLLKbBJPKAwdmbvG7514usCtOvLy8XCytLx1vtVoGANGCObK+a5gxQBOHjA9crP38vb2dARCfMx1VH3uXsnhrsTrlpxq2b4O3seVs9tAFnPDe94qicP1+P6QKn+3Va75nuzZ0Op0dBwD1PzMPXDV/MrQ+UKzHGBWob6hYdWNJVKwoVWOMitRXF6omOL8F4JrD7iAFDWchRZBGUiI5u78eAKQkJQDHaGgAzgCAG+8gSpJ1zhoSACwOiwCspMlvdBBglMQU41YatxynMJP3GGBIBpHzSsoPAlwIAe82O80jOh/SpWtXPwOoHwRYSb3La6sbtaJ6vRwMPv+ylWcnY9nO83xqWMa7YDrXaNQ3et3uR4oeRLZ/BwIleSDN1eq1poCLAOCsWynqRVPkjCFOFfV6E8AFEAEHD0lQJDlNZq+G3d55It783m6PUsDZwaA8P+3cj5Hsa++H84bpjqBivJe9EQigBMNCpFsR7JfT6+svFcvHSrZRlsNHxnEuhnAbMJ8oekFuLwHBKqBRijqT5/kqgAvf220v8EaeZ6sjaw2hk1mWr0paABEI1vYBxHvnslka3h8MBpC0cHnt6hdrTea9B5neknza7/UAcCmv5ItJ6c0kugGQrqytrNOaeynGJCADUADYISlBDQgBwMBamyGlD283Oy/+vbL/0l+kDBt2ia+H8AAAAABJRU5ErkJggg=="
+)
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+        "novembre", "décembre"]
 TROMBONE = (
     "iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAACeUlEQVR4nI2Uz2sTQRTHv29msknaiArSf0APNhZBawVP8dDSJG3STWUrQsFDQQS9CPWc5qo9KkWPUi/dCqEmGEHPeigUPQRBD15aBA8epDHZnZ3nIT9I7Kb4ve2b4TPft2++A4QolUqp/6n1i4bUeNqZPmkhfo0CIdDSH6rV6q/uWhhI9H8Ui0UBgNMLuZWoGd2PR0fexEZiVcTUQcbO3wXAnT3DHTmOI13XNVk7l48nRsrNZusLa/PSwLBU6lY8HrvQaBzenJq4vF2v18l13aAf1Os7mUwyAIagR17LPwh8fV9a6qmEsHTLv9MU9BwsHpdKpa2OgYE2u44kgCBj5+aVFXnt+35ZSXGOiM4w0DCGPTbmq1JqRutg9erFSxtra2tMRD2QAIBUKkUAQEQrgdZNEO/G4vEJ3+jbFbd8Vkl5HgStA/1eCHpSqVRkB0IDoK6Y+RAAgdEwxjC1ncIYw2TQAADD5ncikTgyucEJEImOM4HBq0HcWQNIhgwNoaMMkQYQHLdhCIgYgCbR/pmWZSkCTrVhHAocABHAzMwAq4hlKQ44BgAtz1sn4AUYpwWJE2GggfwwoKSUMgjMD6/lbTFjHwBVt8sPAdDcDXvWGPN9bGwsNCY9Z+nC/FR+aZEz9vxmt55Op6MAkLFzm/mlxZ8zy8ujQC9O/d20VSwWRalUMulC7qNlRa54Wk/VXu3sAUDWtseVJfa0r7+ZP95krVbz8E94e9R6vU4ASCn5gEBSkdjNFPLPsoXchlD4TEJEDZt7tVqt5TjOkSENPCNdV7MLc9eVkutSRSYJgK/1p8DXq293qu+YmfqjcZx6p2Vtezzt5JPDDu7XX0akABzlZsjhAAAAAElFTkSuQmCC"
 )
@@ -55,8 +61,9 @@ def _abreger(nom, longueur=28):
 class ChoixReleve(ttk.Frame):
     """Choix d'un relevé de paye (PDF) : joindre, remplacer ou retirer."""
 
-    def __init__(self, parent, nom_existant=None):
+    def __init__(self, parent, nom_existant=None, on_change=None):
         super().__init__(parent, style="Carte.TFrame")
+        self.on_change = on_change
         self.nom_existant = nom_existant
         self.chemin = None
         self.retirer = False
@@ -90,6 +97,8 @@ class ChoixReleve(ttk.Frame):
             self.btn_x.pack(side="left", padx=(6, 0))
         else:
             self.btn_x.pack_forget()
+        if self.on_change:
+            self.on_change()
 
     def reinitialiser(self):
         self.nom_existant = None
@@ -106,6 +115,122 @@ class ChoixReleve(ttk.Frame):
             base.joindre_releve(id_, *pdf)
         elif self.retirer:
             base.retirer_releve(id_)
+
+
+class ChampDate(ttk.Frame):
+    """Champ de date : on tape AAAA-MM-JJ, ou on clique pour choisir dans un calendrier."""
+
+    def __init__(self, parent, variable, largeur=12, police=(POLICE, 11), on_change=None):
+        super().__init__(parent, style="Carte.TFrame")
+        self.var = variable
+        self.on_change = on_change
+        self.popup = None
+        self._liaisons = []
+        self.entree = ttk.Entry(self, textvariable=variable, width=largeur, font=police)
+        self.entree.pack(side="left", fill="both", expand=True)
+        self.img = tk.PhotoImage(data=CALENDRIER)
+        self.btn = ttk.Button(self, image=self.img, style="Icone.TButton", takefocus=False, command=self.basculer)
+        self.btn.pack(side="left", fill="y", padx=(4, 0))
+        self.entree.bind("<Button-1>", lambda _e: self.after(1, self.ouvrir), add="+")
+        self.entree.bind("<Escape>", self._echap, add="+")
+        self.entree.bind("<Tab>", lambda _e: self.fermer(), add="+")
+        self.bind("<Destroy>", lambda _e: self.fermer(), add="+")
+
+    def basculer(self):
+        if self.popup:
+            self.fermer()
+        else:
+            self.entree.focus_set()
+            self.ouvrir()
+
+    def ouvrir(self):
+        if self.popup:
+            return
+        try:
+            choisie = calcul.parse_date(self.var.get())
+        except ValueError:
+            choisie = dt.date.today()
+        self.mois = choisie.replace(day=1)
+        self.popup = tk.Toplevel(self)
+        self.popup.overrideredirect(True)
+        self.popup.configure(bg=BORD)
+        self.cadre = tk.Frame(self.popup, bg=BLANC, padx=8, pady=8)
+        self.cadre.pack(padx=1, pady=1)
+        self._dessiner()
+        self.popup.geometry(f"+{self.winfo_rootx()}+{self.winfo_rooty() + self.winfo_height() + 2}")
+        self.popup.lift()
+        fenetre = self.winfo_toplevel()
+        self._liaisons = [(fenetre, "<Button-1>", fenetre.bind("<Button-1>", self._clic_ailleurs, add="+")),
+                          (fenetre, "<Configure>", fenetre.bind("<Configure>", self._deplacement, add="+"))]
+
+    def fermer(self):
+        for widget, sequence, ident in self._liaisons:
+            try:
+                widget.unbind(sequence, ident)
+            except tk.TclError:
+                pass
+        self._liaisons = []
+        if self.popup:
+            self.popup.destroy()
+            self.popup = None
+
+    def _echap(self, _e):
+        if self.popup:
+            self.fermer()
+            return "break"  # ne ferme pas la fenêtre de dialogue
+        return None
+
+    def _clic_ailleurs(self, ev):
+        if str(ev.widget).startswith(str(self)):
+            return
+        self.fermer()
+
+    def _deplacement(self, ev):
+        if ev.widget is self.winfo_toplevel():
+            self.fermer()
+
+    def _changer_mois(self, delta):
+        mois = self.mois.month - 1 + delta
+        self.mois = dt.date(self.mois.year + mois // 12, mois % 12 + 1, 1)
+        self._dessiner()
+
+    def _dessiner(self):
+        for w in self.cadre.winfo_children():
+            w.destroy()
+        try:
+            choisie = calcul.parse_date(self.var.get())
+        except ValueError:
+            choisie = None
+        aujourdhui = dt.date.today()
+        bouton = dict(relief="flat", bd=0, cursor="hand2", takefocus=0, font=(POLICE, 10))
+        tk.Button(self.cadre, text="‹", bg=BLANC, activebackground=VERT_PALE, width=3,
+                  command=lambda: self._changer_mois(-1), **bouton).grid(row=0, column=0)
+        tk.Label(self.cadre, text=f"{MOIS[self.mois.month - 1]} {self.mois.year}", bg=BLANC, fg=TEXTE,
+                 font=(POLICE, 10, "bold")).grid(row=0, column=1, columnspan=5)
+        tk.Button(self.cadre, text="›", bg=BLANC, activebackground=VERT_PALE, width=3,
+                  command=lambda: self._changer_mois(1), **bouton).grid(row=0, column=6)
+        for col, jour in enumerate(("L", "M", "M", "J", "V", "S", "D")):
+            tk.Label(self.cadre, text=jour, bg=BLANC, fg=GRIS, font=(POLICE, 9)).grid(row=1, column=col, pady=(4, 2))
+        semaines = calendar.Calendar(firstweekday=0).monthdatescalendar(self.mois.year, self.mois.month)
+        for ligne, semaine in enumerate(semaines, 2):
+            for col, jour in enumerate(semaine):
+                if jour == choisie:
+                    fond, texte = VERT, BLANC
+                elif jour == aujourdhui:
+                    fond, texte = VERT_PALE, VERT_FONCE
+                else:
+                    fond, texte = BLANC, TEXTE if jour.month == self.mois.month else "#9AA19D"
+                tk.Button(self.cadre, text=str(jour.day), bg=fond, fg=texte, activebackground=VERT_PALE, width=3,
+                          command=lambda j=jour: self.choisir(j), **bouton).grid(row=ligne, column=col, padx=1, pady=1)
+        tk.Button(self.cadre, text="Aujourd'hui", bg=BLANC, fg=VERT, activebackground=VERT_PALE,
+                  command=lambda: self.choisir(aujourdhui), **bouton).grid(row=9, column=0, columnspan=7, pady=(6, 0))
+
+    def choisir(self, jour):
+        self.var.set(jour.isoformat())
+        self.fermer()
+        self.entree.focus_set()
+        if self.on_change:
+            self.on_change(jour)
 
 
 class Dialogue(tk.Toplevel):
@@ -156,11 +281,16 @@ class Dialogue(tk.Toplevel):
         except ValueError as err:
             messagebox.showerror("Valeur invalide", str(err), parent=self)
 
-    def champ(self, cadre, ligne, libelle, valeur="", largeur=14, aide=None, masque=False):
+    def champ(self, cadre, ligne, libelle, valeur="", largeur=14, aide=None, masque=False, date=False):
         ttk.Label(cadre, text=libelle, style="Champ.TLabel").grid(row=ligne, column=0, sticky="w", pady=(0, 4))
         var = tk.StringVar(value=valeur)
-        entree = ttk.Entry(cadre, textvariable=var, width=largeur, font=(POLICE, 11), show="•" if masque else "")
-        entree.grid(row=ligne + 1, column=0, sticky="w", pady=(0, 2 if aide else 14))
+        if date:
+            widget = ChampDate(cadre, var, largeur=largeur)
+            entree = widget.entree
+        else:
+            widget = entree = ttk.Entry(cadre, textvariable=var, width=largeur, font=(POLICE, 11),
+                                        show="•" if masque else "")
+        widget.grid(row=ligne + 1, column=0, sticky="w", pady=(0, 2 if aide else 14))
         if aide:
             ttk.Label(cadre, text=aide, style="Aide.TLabel").grid(row=ligne + 2, column=0, sticky="w", pady=(0, 14))
         return var, entree
@@ -189,7 +319,7 @@ class DialogueParametres(Dialogue):
         self.var_date_depart = tk.StringVar(value=(depart.debut if depart else dt.date(dt.date.today().year, 1, 1)).isoformat())
         ttk.Entry(ligne_dep, textvariable=self.var_depart, width=12, font=(POLICE, 11)).pack(side="left")
         ttk.Label(ligne_dep, text=" $  au ", style="Carte.TLabel").pack(side="left")
-        ttk.Entry(ligne_dep, textvariable=self.var_date_depart, width=12, font=(POLICE, 11)).pack(side="left")
+        ChampDate(ligne_dep, self.var_date_depart).pack(side="left")
         ttk.Label(c, text="Pour reprendre un solde déjà inscrit sur ton talon de paye.", style="Aide.TLabel").grid(
             row=6, column=0, sticky="w", pady=(2, 10))
 
@@ -328,7 +458,7 @@ class DialogueVacances(Dialogue):
         e = self.entree
         self.taux = (e.taux if e and e.taux else None) or base.taux
         self.var_date, _ = self.champ(c, 0, "Date (ou première journée)",
-                                      (e.debut if e else dt.date.today()).isoformat())
+                                      (e.debut if e else dt.date.today()).isoformat(), date=True)
 
         ttk.Label(c, text="Saisir en", style="Champ.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 4))
         self.var_mode = tk.StringVar(value="montant" if e and e.heures is None else "heures")
@@ -440,8 +570,8 @@ class DialoguePeriode(Dialogue):
 
     def construire(self, c):
         e = self.entree
-        self.var_debut, _ = self.champ(c, 0, "Début", e.debut.isoformat())
-        self.var_fin, _ = self.champ(c, 2, "Fin", e.fin.isoformat())
+        self.var_debut, _ = self.champ(c, 0, "Début", e.debut.isoformat(), date=True)
+        self.var_fin, _ = self.champ(c, 2, "Fin", e.fin.isoformat(), date=True)
         self.var_heures, entree = self.champ(c, 4, "Heures travaillées", calcul.formater_simple(e.heures),
                                              aide=f"Taux de cette période : {calcul.formater_argent(e.taux)} · "
                                                   f"{calcul.formater_simple(e.pct)} %")
@@ -552,6 +682,7 @@ class Application(tk.Tk):
         s.configure("Recap.TLabel", background=FOND)
         s.configure("Alerte.TLabel", background=BLANC, foreground=ROUGE, font=(POLICE, 9, "bold"))
         s.configure("Calcul.TLabel", background=BLANC, foreground=GRIS)
+        s.configure("Icone.TButton", padding=(6, 2), background=BLANC)
         s.configure("Pilule.TButton", background=VERT_PALE, foreground=VERT_FONCE, bordercolor="#C3DED4",
                     padding=(14, 7), font=(POLICE, 10))
         s.map("Pilule.TButton", background=[("active", VERT_TEXTE_PALE)])
@@ -608,7 +739,7 @@ class Application(tk.Tk):
 
         # Formulaire : nouvelle période (champs à gauche, résultat en évidence à droite)
         carte = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1)
-        carte.pack(fill="x")
+        carte.pack(fill="x", pady=(0, 14))
         droite = tk.Frame(carte, bg=VERT_PALE, padx=22, pady=16)
         droite.pack(side="right", fill="y")
         tk.Frame(droite, bg=VERT_PALE, width=250, height=0).pack()
@@ -641,8 +772,14 @@ class Application(tk.Tk):
             champs.columnconfigure(col, weight=1, uniform="champ")
             ttk.Label(champs, text=txt, style="Champ.TLabel").grid(row=0, column=col, sticky="w", padx=(0, 14),
                                                                    pady=(0, 4))
-            e = ttk.Entry(champs, textvariable=var, font=(POLICE, 12, "bold" if col == 2 else "normal"))
-            e.grid(row=1, column=col, sticky="we", padx=(0, 14 if col < 2 else 0), ipady=3)
+            if col < 2:
+                champ = ChampDate(champs, var, police=(POLICE, 12),
+                                  on_change=self._debut_choisi if col == 0 else lambda _j: self._verifier_releve())
+                champ.grid(row=1, column=col, sticky="we", padx=(0, 14))
+                e = champ.entree
+            else:
+                e = ttk.Entry(champs, textvariable=var, font=(POLICE, 12, "bold"))
+                e.grid(row=1, column=col, sticky="we", ipady=3)
             e.bind("<Return>", lambda _e: self.ajouter_periode())
             if col == 2:
                 self.entree_heures = e
@@ -652,14 +789,14 @@ class Application(tk.Tk):
         zone.pack(fill="x", pady=(16, 0))
         tk.Label(zone, image=self.img_trombone, bg=BLANC).pack(side="left")
         ttk.Label(zone, text="Relevé de paye (PDF, optionnel)", style="Aide.TLabel").pack(side="left", padx=(8, 0))
-        self.releve_periode = ChoixReleve(zone)
+        self.releve_periode = ChoixReleve(zone, on_change=self._releve_choisi)
         self.releve_periode.pack(side="right")
+        self.lbl_verif = tk.Label(gauche, text="", bg=BLANC, fg=GRIS, font=(POLICE, 10), anchor="w", justify="left")
+        self.btn_suggestion = ttk.Button(gauche, command=self._utiliser_suggestion)
+        self._analyse = None
+        self._suggestion = None
 
-        bas = ttk.Frame(c)
-        bas.pack(fill="x", pady=(10, 14))
-        ttk.Button(bas, text="−  J'ai pris des vacances", style="Danger.TButton",
-                   command=self.deduire_vacances).pack(side="right")
-        self.var_heures.trace_add("write", lambda *_: self._apercu_periode())
+        self.var_heures.trace_add("write", lambda *_: (self._apercu_periode(), self._verifier_releve()))
 
         # Historique
         hist = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1)
@@ -714,6 +851,8 @@ class Application(tk.Tk):
     def _menus(self):
         barre = tk.Menu(self)
         fichier = tk.Menu(barre, tearoff=False)
+        fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
+        fichier.add_separator()
         fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
         fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
         fichier.add_separator()
@@ -744,6 +883,8 @@ class Application(tk.Tk):
             parent=self))
         barre.add_cascade(label="Aide", menu=aide)
         self.configure(menu=barre)
+        self.bind_all("<Control-d>", lambda _e: self.deduire_vacances())
+        self.bind_all("<Control-D>", lambda _e: self.deduire_vacances())
 
     def _tuile(self, parent, col, titre, fond, couleur_valeur, couleur_info):
         cadre = tk.Frame(parent, bg=fond, padx=18, pady=14,
@@ -830,6 +971,58 @@ class Application(tk.Tk):
 
     # --- Actions ------------------------------------------------------------
 
+    def _debut_choisi(self, jour):
+        """Choisir le début au calendrier remplit la fin (même durée de période)."""
+        self.var_fin.set((jour + dt.timedelta(days=calcul.DUREE_PERIODE_JOURS)).isoformat())
+        self._verifier_releve()
+
+    def _releve_choisi(self):
+        if not hasattr(self, "lbl_verif"):
+            return
+        self._analyse = None
+        if self.releve_periode.chemin:
+            try:
+                _nom, contenu = Base.lire_pdf(self.releve_periode.chemin)
+                self._analyse = releve.analyser(contenu)
+            except ValueError:
+                self._analyse = releve.Analyse(lisible=False)
+            # Heures vides : on les remplit à partir du relevé.
+            if not self.var_heures.get().strip() and self._analyse.suggestion is not None:
+                self.var_heures.set(calcul.formater_simple(self._analyse.suggestion))
+        self._verifier_releve()
+
+    def _verifier_releve(self):
+        if not hasattr(self, "lbl_verif"):
+            return
+        self.btn_suggestion.pack_forget()
+        self._suggestion = None
+        if self._analyse is None:
+            self.lbl_verif.pack_forget()
+            return
+        try:
+            heures = calcul.parse_nombre(self.var_heures.get())
+        except ValueError:
+            heures = None
+        dates = []
+        for var in (self.var_debut, self.var_fin):
+            try:
+                dates.append(calcul.parse_date(var.get()))
+            except ValueError:
+                dates.append(None)
+        v = releve.verifier(self._analyse, heures, *dates)
+        couleurs = {"ok": (VERT, "✓  "), "attention": (ROUGE, "⚠  "), "inconnu": (GRIS, "")}
+        couleur, prefixe = couleurs[v.statut]
+        self.lbl_verif.configure(text=prefixe + v.message, fg=couleur)
+        self.lbl_verif.pack(side="left", fill="x", expand=True, pady=(8, 0))
+        if v.suggestion is not None and v.suggestion != heures:
+            self._suggestion = v.suggestion
+            self.btn_suggestion.configure(text=f"Utiliser {calcul.formater_nombre(v.suggestion)} h")
+            self.btn_suggestion.pack(side="right", pady=(8, 0))
+
+    def _utiliser_suggestion(self):
+        if self._suggestion is not None:
+            self.var_heures.set(calcul.formater_simple(self._suggestion))
+
     def ajouter_periode(self):
         try:
             if self.base.taux <= 0:
@@ -838,6 +1031,12 @@ class Application(tk.Tk):
             fin = calcul.parse_date(self.var_fin.get())
             heures = calcul.parse_nombre(self.var_heures.get())
             pdf = self.releve_periode.lire()
+            if pdf and self._analyse is not None:
+                v = releve.verifier(self._analyse, heures, debut, fin)
+                if v.statut == "attention" and not messagebox.askyesno(
+                        "Relevé de paye", f"{v.message}\n\nAjouter la période quand même ?", icon="warning",
+                        parent=self):
+                    return
             if self.base.periode_existe(debut) and not messagebox.askyesno(
                     "Période existante", f"Une période commençant le {debut.isoformat()} existe déjà.\n"
                                          "L'ajouter quand même ?", parent=self):
