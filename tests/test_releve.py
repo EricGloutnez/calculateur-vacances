@@ -30,13 +30,13 @@ def test_lit_les_heures_et_les_dates():
 def test_verifier_ok_et_ecart():
     a = releve.analyser_texte(TALON)
     v = releve.verifier(a, Decimal(80), D(2026, 10, 7), D(2026, 10, 21))
-    assert v.statut == "ok" and "confirme 80,00 h" in v.message
+    assert v.statut == "ok" and "confirmées par le relevé : 80,00 h" in v.message
     v = releve.verifier(a, Decimal("75.5"), D(2026, 10, 7), D(2026, 10, 21))
     assert v.statut == "ok"  # les heures régulières seules sont aussi reconnues
     v = releve.verifier(a, Decimal(70), D(2026, 10, 7), D(2026, 10, 21))
     assert v.statut == "attention" and v.suggestion == Decimal(80)
     v = releve.verifier(a, Decimal(80), D(2026, 10, 21), D(2026, 11, 4))
-    assert v.statut == "attention" and "2026-11-04" in v.message
+    assert v.statut == "attention" and v.periode == (D(2026, 10, 7), D(2026, 10, 21))
 
 
 def test_sans_total_on_additionne():
@@ -83,3 +83,37 @@ def test_lecture_d_un_vrai_pdf():
     a = releve.analyser(pdf)
     assert a.lisible and a.suggestion == Decimal("80.00")
     assert releve.verifier(a, Decimal(80), D(2026, 10, 7), D(2026, 10, 21)).statut == "ok"
+
+
+# Texte extrait d'un vrai relevé (format « Rapport de paye »), données personnelles remplacées.
+RAPPORT_DE_PAYE = """RAPPORT DE PAYEEMPLOYEUR EXEMPLE INC.       0I 
+Période duX000 24 septembre 2026
+NOM PRENOM                           07 octobre 2026  Au
+Payable le123 RUE EXEMPLE                         15 octobre 2026  
+VILLE  QC  A1A 1A1                  Taux hor./Période 4 250.00
+Qtés Cour. Montant Cour. Qtés acc. Montant acc.Gains
+  
+ 4 250.00Hres régulières 68.00
+Hres majorées 0.00 0.00
+Vacances versées 0.00
+Congé Férié Versé 0.00
+Déductions
+ 259.27RRQ
+Assurance-emploi 55.25
+Sommaire Montant Couru.Montant Acc.
+Gains 4 250.00
+ 1 409.94Déductions
+Paie Net 2 840.06"""
+
+
+def test_rapport_de_paye():
+    a = releve.analyser_texte(RAPPORT_DE_PAYE)
+    assert [h for _, h, _ in a.heures] == [Decimal("68.00")]
+    assert a.periode == (D(2026, 9, 24), D(2026, 10, 7))
+    assert a.gains == Decimal("4250.00")
+    v = releve.verifier(a, Decimal(68), D(2026, 9, 24), D(2026, 10, 7), taux=Decimal("62.50"))
+    assert v.statut == "ok", v.message
+    v = releve.verifier(a, Decimal(68), D(2026, 10, 8), D(2026, 10, 21), taux=Decimal("62.50"))
+    assert v.statut == "attention" and v.periode == (D(2026, 9, 24), D(2026, 10, 7))
+    v = releve.verifier(a, Decimal(68), D(2026, 9, 24), D(2026, 10, 7), taux=Decimal(25))
+    assert v.statut == "attention" and "62,50" in v.message

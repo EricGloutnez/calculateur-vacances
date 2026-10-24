@@ -791,12 +791,19 @@ class Application(tk.Tk):
         ttk.Label(zone, text="Relevé de paye (PDF, optionnel)", style="Aide.TLabel").pack(side="left", padx=(8, 0))
         self.releve_periode = ChoixReleve(zone, on_change=self._releve_choisi)
         self.releve_periode.pack(side="right")
-        self.lbl_verif = tk.Label(gauche, text="", bg=BLANC, fg=GRIS, font=(POLICE, 10), anchor="w", justify="left")
-        self.btn_suggestion = ttk.Button(gauche, command=self._utiliser_suggestion)
+        self.cadre_verif = ttk.Frame(gauche, style="Carte.TFrame")
+        self.cadre_verif.pack(fill="x")
+        self.lbl_verif = tk.Label(self.cadre_verif, text="", bg=BLANC, fg=GRIS, font=(POLICE, 10), anchor="w",
+                                  justify="left", wraplength=430)
+        self.btn_suggestion = ttk.Button(self.cadre_verif, command=self._utiliser_suggestion)
+        self.btn_dates = ttk.Button(self.cadre_verif, command=self._utiliser_dates)
+        self._periode_releve = None
         self._analyse = None
         self._suggestion = None
 
         self.var_heures.trace_add("write", lambda *_: (self._apercu_periode(), self._verifier_releve()))
+        self.var_debut.trace_add("write", lambda *_: self._verifier_releve())
+        self.var_fin.trace_add("write", lambda *_: self._verifier_releve())
 
         # Historique
         hist = tk.Frame(c, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1)
@@ -995,7 +1002,9 @@ class Application(tk.Tk):
         if not hasattr(self, "lbl_verif"):
             return
         self.btn_suggestion.pack_forget()
+        self.btn_dates.pack_forget()
         self._suggestion = None
+        self._periode_releve = None
         if self._analyse is None:
             self.lbl_verif.pack_forget()
             return
@@ -1009,7 +1018,7 @@ class Application(tk.Tk):
                 dates.append(calcul.parse_date(var.get()))
             except ValueError:
                 dates.append(None)
-        v = releve.verifier(self._analyse, heures, *dates)
+        v = releve.verifier(self._analyse, heures, *dates, taux=self.base.taux)
         couleurs = {"ok": (VERT, "✓  "), "attention": (ROUGE, "⚠  "), "inconnu": (GRIS, "")}
         couleur, prefixe = couleurs[v.statut]
         self.lbl_verif.configure(text=prefixe + v.message, fg=couleur)
@@ -1017,7 +1026,18 @@ class Application(tk.Tk):
         if v.suggestion is not None and v.suggestion != heures:
             self._suggestion = v.suggestion
             self.btn_suggestion.configure(text=f"Utiliser {calcul.formater_nombre(v.suggestion)} h")
-            self.btn_suggestion.pack(side="right", pady=(8, 0))
+            self.btn_suggestion.pack(side="right", pady=(8, 0), padx=(8, 0))
+        if v.periode:
+            self._periode_releve = v.periode
+            self.btn_dates.configure(text="Utiliser les dates du relevé")
+            self.btn_dates.pack(side="right", pady=(8, 0), padx=(8, 0))
+
+    def _utiliser_dates(self):
+        if self._periode_releve:
+            debut, fin = self._periode_releve
+            self.var_debut.set(debut.isoformat())
+            self.var_fin.set(fin.isoformat())
+            self._verifier_releve()
 
     def _utiliser_suggestion(self):
         if self._suggestion is not None:
@@ -1032,7 +1052,7 @@ class Application(tk.Tk):
             heures = calcul.parse_nombre(self.var_heures.get())
             pdf = self.releve_periode.lire()
             if pdf and self._analyse is not None:
-                v = releve.verifier(self._analyse, heures, debut, fin)
+                v = releve.verifier(self._analyse, heures, debut, fin, taux=self.base.taux)
                 if v.statut == "attention" and not messagebox.askyesno(
                         "Relevé de paye", f"{v.message}\n\nAjouter la période quand même ?", icon="warning",
                         parent=self):
