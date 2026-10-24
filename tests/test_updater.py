@@ -40,3 +40,13 @@ def test_verifier(monkeypatch):
 def test_peut_installer_hors_exe():
     rel = updater.Release("9.9.9", "https://a/x.exe", "https://a", "")
     assert not updater.peut_installer(rel)  # en développement : pas un .exe gelé
+
+
+def test_environnement_propre():
+    env = updater.environnement_propre({
+        "PATH": "C:\\Windows",
+        "_PYI_APPLICATION_HOME_DIR": "C:\\Temp\\_MEI123",
+        "_PYI_PARENT_PROCESS_LEVEL": "1",
+        "_MEIPASS2": "C:\\Temp\\_MEI123",
+    })
+    assert env == {"PATH": "C:\\Windows", "PYINSTALLER_RESET_ENVIRONMENT": "1"}

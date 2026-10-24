@@ -88,13 +88,27 @@ def telecharger(release):
     return nouveau
 
 
+def environnement_propre(env=None):
+    """Environnement sans les variables internes de PyInstaller.
+
+    Sinon le nouveau .exe, relancé depuis l'ancien, croit être son processus enfant et cherche
+    python3XX.dll dans le dossier temporaire _MEI… de l'ancien, déjà effacé.
+    """
+    env = dict(os.environ if env is None else env)
+    for cle in list(env):
+        if cle.upper().startswith(("_PYI_", "_MEIPASS")):
+            del env[cle]
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
 def lancer_remplacement(nouveau):
     """Un petit script attend la fermeture de l'appli, remplace le .exe et le relance."""
     exe = chemin_exe()
     script = f"""@echo off
 set /a essais=0
 :attente
-timeout /t 1 /nobreak >nul
+ping -n 2 127.0.0.1 >nul
 move /y "{nouveau}" "{exe}" >nul 2>&1
 if not errorlevel 1 goto relance
 set /a essais+=1
@@ -106,5 +120,6 @@ del "%~f0"
     fd, chemin = tempfile.mkstemp(suffix=".bat", prefix="maj_vacances_")
     with os.fdopen(fd, "w", encoding="mbcs" if sys.platform == "win32" else "utf-8") as f:
         f.write(script)
-    drapeaux = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen(["cmd", "/c", chemin], creationflags=drapeaux, close_fds=True)
+    # Console cachée (pas DETACHED_PROCESS : sans console, l'attente du script échoue).
+    drapeaux = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    subprocess.Popen(["cmd", "/c", chemin], creationflags=drapeaux, close_fds=True, env=environnement_propre())
