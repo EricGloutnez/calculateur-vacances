@@ -184,3 +184,28 @@ def test_base_version_1_migree(tmp_path):
     b.joindre_releve(e.id, "r.pdf", PDF)
     assert b.entree(e.id).releve == "r.pdf"
     b.fermer()
+
+
+def test_mot_de_passe(tmp_path):
+    chemin = tmp_path / "v.db"
+    b = Base(chemin)
+    assert not b.a_mot_de_passe and b.verifier_mot_de_passe("n'importe")
+    with pytest.raises(ValueError):
+        b.definir_mot_de_passe("abc")
+    b.definir_mot_de_passe("Été 2026!")
+    stocke = b._param("mot_de_passe")
+    assert "Été" not in stocke and stocke.startswith("pbkdf2_sha256$")
+    b.fermer()
+    b = Base(chemin)
+    assert b.a_mot_de_passe
+    assert b.verifier_mot_de_passe("Été 2026!")
+    assert not b.verifier_mot_de_passe("ete 2026!")
+    b.definir_mot_de_passe(None)
+    assert not b.a_mot_de_passe
+    b.fermer()
+
+
+def test_premier_lancement(base):
+    assert not base.premier_lancement_fait
+    base.marquer_premier_lancement()
+    assert base.premier_lancement_fait

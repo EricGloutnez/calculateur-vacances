@@ -148,10 +148,10 @@ class Dialogue(tk.Toplevel):
         except ValueError as err:
             messagebox.showerror("Valeur invalide", str(err), parent=self)
 
-    def champ(self, cadre, ligne, libelle, valeur="", largeur=14, aide=None):
+    def champ(self, cadre, ligne, libelle, valeur="", largeur=14, aide=None, masque=False):
         ttk.Label(cadre, text=libelle, style="Champ.TLabel").grid(row=ligne, column=0, sticky="w", pady=(0, 4))
         var = tk.StringVar(value=valeur)
-        entree = ttk.Entry(cadre, textvariable=var, width=largeur, font=(POLICE, 11))
+        entree = ttk.Entry(cadre, textvariable=var, width=largeur, font=(POLICE, 11), show="•" if masque else "")
         entree.grid(row=ligne + 1, column=0, sticky="w", pady=(0, 2 if aide else 14))
         if aide:
             ttk.Label(cadre, text=aide, style="Aide.TLabel").grid(row=ligne + 2, column=0, sticky="w", pady=(0, 14))
@@ -210,6 +210,13 @@ class DialogueParametres(Dialogue):
         ttk.Button(ligne_s, text="Importer…", command=self._importer).pack(side="left", padx=(8, 0))
         ttk.Label(c, text=f"Données : {base.chemin}", style="Aide.TLabel", wraplength=440).grid(
             row=14, column=0, sticky="w", pady=(8, 0))
+
+        ttk.Separator(c).grid(row=15, column=0, sticky="we", pady=(14, 12))
+        ttk.Label(c, text="Mot de passe à l'ouverture", style="Champ.TLabel").grid(row=16, column=0, sticky="w",
+                                                                                   pady=(0, 6))
+        self.ligne_mdp = ttk.Frame(c, style="Carte.TFrame")
+        self.ligne_mdp.grid(row=17, column=0, sticky="we")
+        self._maj_mdp()
         e_taux.focus_set()
         e_taux.select_range(0, "end")
 
@@ -229,6 +236,26 @@ class DialogueParametres(Dialogue):
         base.definir_solde_depart(depart, date_depart)
         self.parent.rafraichir()
         return True
+
+    def _maj_mdp(self):
+        for w in self.ligne_mdp.winfo_children():
+            w.destroy()
+        if self.parent.base.a_mot_de_passe:
+            ttk.Label(self.ligne_mdp, text="Activé : demandé à chaque ouverture", style="Aide.TLabel").pack(side="left")
+            ttk.Button(self.ligne_mdp, text="Retirer", command=lambda: self._mot_de_passe(True)).pack(side="right")
+            ttk.Button(self.ligne_mdp, text="Changer…", command=lambda: self._mot_de_passe(False)).pack(
+                side="right", padx=(0, 8))
+        else:
+            ttk.Label(self.ligne_mdp, text="Aucun (optionnel)", style="Aide.TLabel").pack(side="left")
+            ttk.Button(self.ligne_mdp, text="Définir un mot de passe…",
+                       command=lambda: self._mot_de_passe(False)).pack(side="right")
+
+    def _mot_de_passe(self, retirer):
+        dialogue = DialogueMotDePasse(self, self.parent.base, retirer)
+        self.wait_window(dialogue)
+        if self.winfo_exists():
+            self.grab_set()
+            self._maj_mdp()
 
     def _exporter(self):
         nom = f"vacances-sauvegarde-{dt.date.today().isoformat()}.db"
@@ -254,6 +281,43 @@ class DialogueParametres(Dialogue):
         self.parent.rafraichir()
         self.destroy()
         messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self.parent)
+
+
+class DialogueMotDePasse(Dialogue):
+    def __init__(self, parent, base, retirer=False):
+        self.base = base
+        self.retirer = retirer
+        self.existe = base.a_mot_de_passe
+        if retirer:
+            self.titre, self.libelle_ok, self.style_ok = "Retirer le mot de passe", "Retirer", "Danger.TButton"
+        else:
+            self.titre = "Changer le mot de passe" if self.existe else "Définir un mot de passe"
+        super().__init__(parent)
+
+    def construire(self, c):
+        ligne, premier = 0, None
+        if self.existe:
+            self.var_actuel, premier = self.champ(c, 0, "Mot de passe actuel", largeur=28, masque=True)
+            ligne = 2
+        if not self.retirer:
+            self.var_nouveau, entree = self.champ(c, ligne, "Nouveau mot de passe", largeur=28, masque=True)
+            self.var_confirmation, _ = self.champ(c, ligne + 2, "Confirmer le mot de passe", largeur=28, masque=True)
+            ttk.Label(c, text="Il sera demandé à chaque ouverture de l'application.\n"
+                              "Aucune récupération possible : note-le en lieu sûr.",
+                      style="Aide.TLabel").grid(row=ligne + 4, column=0, sticky="w")
+            premier = premier or entree
+        premier.focus_set()
+
+    def valider(self):
+        if self.existe and not self.base.verifier_mot_de_passe(self.var_actuel.get()):
+            raise ValueError("Le mot de passe actuel est incorrect.")
+        if self.retirer:
+            self.base.definir_mot_de_passe(None)
+            return True
+        if self.var_nouveau.get() != self.var_confirmation.get():
+            raise ValueError("Les deux mots de passe ne sont pas identiques.")
+        self.base.definir_mot_de_passe(self.var_nouveau.get())
+        return True
 
 
 class DialogueVacances(Dialogue):
@@ -421,16 +485,60 @@ class Application(tk.Tk):
         if sys.platform == "win32" and icone.exists():
             self.iconbitmap(default=str(icone))
         self._styles()
+        if base.a_mot_de_passe:
+            self._ecran_connexion(vient_d_installer)
+        else:
+            self._demarrer(vient_d_installer)
+
+    def _demarrer(self, vient_d_installer=False):
         self._construire()
         self.rafraichir()
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
         if vient_d_installer:
             self.after(300, self._bienvenue_installation)
-        elif not base.est_configure:
-            self.after(300, self.ouvrir_parametres)
-        elif base.maj_auto:
+        elif not self.base.premier_lancement_fait:
+            self.after(300, self._premier_lancement)
+        if self.base.maj_auto:
             self.verifier_maj(silencieux=True)
+
+    def _premier_lancement(self):
+        """Paramètres ouverts une seule fois, au tout premier lancement."""
+        self.base.marquer_premier_lancement()
+        self.ouvrir_parametres()
+
+    def _ecran_connexion(self, vient_d_installer):
+        ecran = ttk.Frame(self)
+        ecran.pack(fill="both", expand=True)
+        carte = tk.Frame(ecran, bg=BLANC, highlightbackground=BORD, highlightcolor=BORD, highlightthickness=1,
+                         padx=36, pady=30)
+        carte.place(relx=0.5, rely=0.42, anchor="center")
+        tk.Label(carte, text="Mes vacances", bg=BLANC, fg=TEXTE, font=(POLICE, 18, "bold")).pack(anchor="w")
+        ttk.Label(carte, text="Entre ton mot de passe pour ouvrir l'application.", style="Aide.TLabel").pack(
+            anchor="w", pady=(4, 16))
+        ttk.Label(carte, text="Mot de passe", style="Champ.TLabel").pack(anchor="w", pady=(0, 4))
+        var = tk.StringVar()
+        entree = ttk.Entry(carte, textvariable=var, show="•", width=30, font=(POLICE, 12))
+        entree.pack(anchor="w")
+        erreur = ttk.Label(carte, text="", style="Alerte.TLabel")
+        erreur.pack(anchor="w", pady=(6, 10))
+
+        def valider(_e=None):
+            if bouton.instate(["disabled"]):
+                return
+            if self.base.verifier_mot_de_passe(var.get()):
+                ecran.destroy()
+                self._demarrer(vient_d_installer)
+                return
+            var.set("")
+            erreur.configure(text="Mot de passe incorrect.")
+            bouton.state(["disabled"])  # petite pause entre deux essais
+            self.after(1000, lambda: bouton.state(["!disabled"]) if bouton.winfo_exists() else None)
+
+        bouton = ttk.Button(carte, text="Ouvrir", style="Primaire.TButton", command=valider)
+        bouton.pack(anchor="e")
+        entree.bind("<Return>", valider)
+        entree.focus_set()
 
     # --- Construction -------------------------------------------------------
 
@@ -690,8 +798,8 @@ class Application(tk.Tk):
             "Un raccourci a été créé sur le Bureau et dans le menu Démarrer.\n"
             "Tu peux supprimer le fichier que tu as téléchargé.",
             parent=self)
-        if not self.base.est_configure:
-            self.ouvrir_parametres()
+        if not self.base.premier_lancement_fait:
+            self._premier_lancement()
 
     def ouvrir_parametres(self):
         DialogueParametres(self)

@@ -1,6 +1,8 @@
 """Base de données SQLite intégrée (un seul fichier, vacances.db)."""
 
 import datetime as dt
+import hashlib
+import hmac
 import os
 import sqlite3
 import sys
@@ -12,6 +14,8 @@ from . import calcul
 
 VERSION_SCHEMA = 2
 TAILLE_MAX_RELEVE = 25 * 1024 * 1024  # 25 Mo
+LONGUEUR_MIN_MOT_DE_PASSE = 4
+ITERATIONS_MOT_DE_PASSE = 300_000
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS parametres (
@@ -150,6 +154,39 @@ class Base:
     @version_installee.setter
     def version_installee(self, valeur):
         self._set_param("version_installee", valeur)
+
+    @property
+    def premier_lancement_fait(self):
+        return self._param("premier_lancement_fait") == "1"
+
+    def marquer_premier_lancement(self):
+        self._set_param("premier_lancement_fait", "1")
+
+    # --- Mot de passe (verrou d'ouverture ; les données ne sont pas chiffrées) ----
+
+    @property
+    def a_mot_de_passe(self):
+        return self._param("mot_de_passe") is not None
+
+    def definir_mot_de_passe(self, mot_de_passe):
+        """Définit le mot de passe ; None le retire."""
+        if mot_de_passe is None:
+            self.conn.execute("DELETE FROM parametres WHERE cle = 'mot_de_passe'")
+            self.conn.commit()
+            return
+        if len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
+            raise ValueError(f"Le mot de passe doit avoir au moins {LONGUEUR_MIN_MOT_DE_PASSE} caractères.")
+        sel = os.urandom(16)
+        empreinte = _empreinte(mot_de_passe, sel, ITERATIONS_MOT_DE_PASSE)
+        self._set_param("mot_de_passe", f"pbkdf2_sha256${ITERATIONS_MOT_DE_PASSE}${sel.hex()}${empreinte.hex()}")
+
+    def verifier_mot_de_passe(self, mot_de_passe):
+        stocke = self._param("mot_de_passe")
+        if stocke is None:
+            return True
+        _algo, iterations, sel, empreinte = stocke.split("$")
+        essai = _empreinte(mot_de_passe, bytes.fromhex(sel), int(iterations))
+        return hmac.compare_digest(essai, bytes.fromhex(empreinte))
 
     @property
     def est_configure(self):
@@ -360,6 +397,10 @@ class Base:
         if montant is None or Decimal(montant) <= 0:
             raise ValueError("Le montant doit être plus grand que 0.")
         return None, calcul.arrondir(montant)
+
+
+def _empreinte(mot_de_passe, sel, iterations):
+    return hashlib.pbkdf2_hmac("sha256", mot_de_passe.encode("utf-8"), sel, iterations)
 
 
 def _str_ou_none(v):
