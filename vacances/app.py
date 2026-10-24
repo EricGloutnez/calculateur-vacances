@@ -959,7 +959,6 @@ class Application(tk.Tk):
 
         aide = tk.Menu(barre, tearoff=False)
         aide.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
-        aide.add_command(label="Page GitHub de l'application", command=lambda: webbrowser.open(updater.URL_PAGE))
         aide.add_separator()
         aide.add_command(label="À propos", command=lambda: messagebox.showinfo(
             "À propos", f"Calculateur de vacances\nVersion {__version__}\n\nDonnées : {self.base.chemin}",
