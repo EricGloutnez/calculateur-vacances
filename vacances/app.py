@@ -384,11 +384,8 @@ class DialogueParametres(Dialogue):
         ).grid(row=7, column=0, sticky="we", pady=(0, 16))
 
         ttk.Separator(c).grid(row=8, column=0, sticky="we", pady=(0, 12))
-        ttk.Label(c, text="Mises à jour", style="Champ.TLabel").grid(row=9, column=0, sticky="w", pady=(0, 6))
-        ligne_v = ttk.Frame(c, style="Carte.TFrame")
-        ligne_v.grid(row=11, column=0, sticky="we", pady=(0, 12))
-        ttk.Label(ligne_v, text=f"Version installée : {__version__}", style="Aide.TLabel").pack(side="left")
-        ttk.Button(ligne_v, text="Mettre à jour", command=self.parent.mise_a_jour_directe).pack(side="right")
+        ttk.Label(c, text=f"Version {__version__} (mise à jour automatique)", style="Aide.TLabel").grid(
+            row=9, column=0, sticky="w", pady=(0, 12))
 
         ttk.Label(c, text="Sauvegarde", style="Champ.TLabel").grid(row=12, column=0, sticky="w", pady=(0, 6))
         ligne_s = ttk.Frame(c, style="Carte.TFrame")
@@ -697,6 +694,7 @@ class Application(tk.Tk):
         self.rafraichir()
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
+        self.verifier_maj()
         if vient_d_installer:
             self.after(300, self._bienvenue_installation)
         elif not self.base.premier_lancement_fait:
@@ -960,11 +958,6 @@ class Application(tk.Tk):
         fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
         fichier.add_separator()
         fichier.add_command(label="Quitter", command=self.destroy)
-
-        # Mise à jour : un clic vérifie et installe directement.
-        self.btn_mise_a_jour = tk.Button(barre, text="Mise à jour", command=self.mise_a_jour_directe,
-                                         highlightthickness=0, **style)
-        self.btn_mise_a_jour.pack(side="left")
 
         self.var_confidentiel = tk.BooleanVar(value=self.confidentiel)
         tk.Checkbutton(barre, text="Confidentiel", variable=self.var_confidentiel, command=self._appliquer_confidentiel,
@@ -1333,71 +1326,34 @@ class Application(tk.Tk):
             self.rafraichir()
             self._preremplir_periode()
 
-    # --- Mises à jour -------------------------------------------------------
+    # --- Mises à jour (entièrement automatiques) --------------------------------
 
-    def mise_a_jour_directe(self):
-        """Bouton « Mise à jour » : s'il y a une nouvelle version, elle s'installe sans question."""
-        self._installer_direct = True
-        self.btn_mise_a_jour.configure(text="Vérification…")
-        self.verifier_maj(silencieux=False)
-
-    def verifier_maj(self, silencieux=True, parent=None):
+    def verifier_maj(self):
+        """Au démarrage : s'il existe une version plus récente, elle s'installe d'elle-même, sans question."""
         def travail():
             try:
-                self._file_maj.put(("verif", silencieux, parent, updater.verifier(__version__)))
-            except Exception as err:
-                self._file_maj.put(("erreur", silencieux, parent, err))
+                release = updater.verifier(__version__)
+                if release and updater.peut_installer(release):
+                    self._file_maj.put(("trouvee", release))
+                    self._file_maj.put(("telecharge", updater.telecharger(release)))
+            except Exception:  # hors ligne, GitHub indisponible… : on réessaiera au prochain démarrage
+                pass
         threading.Thread(target=travail, daemon=True).start()
 
     def _sonder_maj(self):
         try:
             while True:
-                genre, silencieux, parent, valeur = self._file_maj.get_nowait()
-                if genre in ("verif", "erreur") and hasattr(self, "btn_mise_a_jour"):
-                    self.btn_mise_a_jour.configure(text="Mise à jour")
-                    if not valeur or genre == "erreur":
-                        self._installer_direct = False
-                parent = parent if parent is not None and parent.winfo_exists() else self
-                if genre == "verif":
-                    if valeur:
-                        # Mise à jour demandée par le bouton : installation directe, sans question.
-                        self.release = valeur
-                        self._installer_direct = False
-                        self.installer_maj()
-                    elif not silencieux:
-                        messagebox.showinfo("Mise à jour", "Tu as déjà la dernière version.", parent=parent)
-                elif genre == "erreur" and not silencieux:
-                    messagebox.showerror("Mise à jour", f"Impossible de vérifier les mises à jour :\n{valeur}",
-                                         parent=parent)
+                genre, valeur = self._file_maj.get_nowait()
+                if genre == "trouvee":
+                    self.title(f"Calculateur de vacances v{__version__}  —  installation de la version "
+                               f"{valeur.version}…")
                 elif genre == "telecharge":
                     updater.lancer_remplacement(valeur)
                     self.destroy()
                     return
-                elif genre == "echec":
-                    messagebox.showerror("Mise à jour", f"Le téléchargement a échoué :\n{valeur}\n\n"
-                                                        "La page de téléchargement va s'ouvrir.", parent=self)
-                    webbrowser.open(self.release.url_page)
-                    self.btn_mise_a_jour.configure(text="Mise à jour", state="normal")
         except queue.Empty:
             pass
         self.after(150, self._sonder_maj)
-
-    def installer_maj(self):
-        release = self.release
-        if release is None:
-            return
-        if not updater.peut_installer(release):
-            webbrowser.open(release.url_page)
-            return
-        self.btn_mise_a_jour.configure(text=f"Téléchargement de la version {release.version}…", state="disabled")
-
-        def travail():
-            try:
-                self._file_maj.put(("telecharge", True, None, updater.telecharger(release)))
-            except Exception as err:
-                self._file_maj.put(("echec", True, None, err))
-        threading.Thread(target=travail, daemon=True).start()
-
 
 def _installer(base):
     """Installe le .exe téléchargé et lance la copie installée ; False si l'installation échoue."""

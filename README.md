@@ -44,9 +44,9 @@ Dans Paramètres, **Exporter / Importer** permet de faire une sauvegarde ou de p
 
 ## Mises à jour automatiques
 
-Rien n'est vérifié au démarrage : aucune bannière ni question.
-Le bouton **Mise à jour** de la barre de menus vérifie et installe directement, sans question :
-le nouveau `.exe` remplace l'ancien et l'application redémarre.
+L'application gère elle-même sa version : à chaque ouverture, elle vérifie la dernière Release
+sur GitHub et, s'il y en a une plus récente, la télécharge et l'installe d'elle-même
+(elle se ferme puis se rouvre). L'utilisateur n'a aucune action à faire.
 
 ## Publier une nouvelle version (développeur)
 
