@@ -11,7 +11,7 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
 - Les dates se tapent (AAAA-MM-JJ) ou se choisissent dans un **calendrier**.
 - Le relevé PDF joint est **lu pour contre-vérifier les heures** (et les dates) de la période ;
-  si les heures sont vides, elles sont remplies à partir du relevé.
+  les dates de la période sont reprises du relevé, et les heures aussi si elles sont vides.
 - Tu peux **joindre le relevé de paye (PDF)** à une période ou à des vacances prises.
   Il est conservé dans la base de l'application ; clic droit sur la ligne pour l'ouvrir ou l'enregistrer.
 

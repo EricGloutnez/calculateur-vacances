@@ -796,8 +796,7 @@ class Application(tk.Tk):
         self.lbl_verif = tk.Label(self.cadre_verif, text="", bg=BLANC, fg=GRIS, font=(POLICE, 10), anchor="w",
                                   justify="left", wraplength=430)
         self.btn_suggestion = ttk.Button(self.cadre_verif, command=self._utiliser_suggestion)
-        self.btn_dates = ttk.Button(self.cadre_verif, command=self._utiliser_dates)
-        self._periode_releve = None
+
         self._analyse = None
         self._suggestion = None
 
@@ -993,7 +992,11 @@ class Application(tk.Tk):
                 self._analyse = releve.analyser(contenu)
             except ValueError:
                 self._analyse = releve.Analyse(lisible=False)
-            # Heures vides : on les remplit à partir du relevé.
+            # Les dates de la période viennent du relevé ; les heures aussi si elles sont vides.
+            if self._analyse.periode:
+                debut, fin = self._analyse.periode
+                self.var_debut.set(debut.isoformat())
+                self.var_fin.set(fin.isoformat())
             if not self.var_heures.get().strip() and self._analyse.suggestion is not None:
                 self.var_heures.set(calcul.formater_simple(self._analyse.suggestion))
         self._verifier_releve()
@@ -1002,9 +1005,7 @@ class Application(tk.Tk):
         if not hasattr(self, "lbl_verif"):
             return
         self.btn_suggestion.pack_forget()
-        self.btn_dates.pack_forget()
         self._suggestion = None
-        self._periode_releve = None
         if self._analyse is None:
             self.lbl_verif.pack_forget()
             return
@@ -1027,17 +1028,7 @@ class Application(tk.Tk):
             self._suggestion = v.suggestion
             self.btn_suggestion.configure(text=f"Utiliser {calcul.formater_nombre(v.suggestion)} h")
             self.btn_suggestion.pack(side="right", pady=(8, 0), padx=(8, 0))
-        if v.periode:
-            self._periode_releve = v.periode
-            self.btn_dates.configure(text="Utiliser les dates du relevé")
-            self.btn_dates.pack(side="right", pady=(8, 0), padx=(8, 0))
 
-    def _utiliser_dates(self):
-        if self._periode_releve:
-            debut, fin = self._periode_releve
-            self.var_debut.set(debut.isoformat())
-            self.var_fin.set(fin.isoformat())
-            self._verifier_releve()
 
     def _utiliser_suggestion(self):
         if self._suggestion is not None:
