@@ -125,3 +125,62 @@ def test_import_refuse_mauvais_fichier(base, tmp_path):
     with pytest.raises(ValueError):
         base.importer(autre)
     assert len(base.entrees()) == 1
+
+
+PDF = b"%PDF-1.4\n%fake\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+
+
+def test_releve_pdf(base, tmp_path):
+    fichier = tmp_path / "releve-2026-10-21.pdf"
+    fichier.write_bytes(PDF)
+    id_ = base.ajouter_periode(D(2026, 10, 7), D(2026, 10, 21), Decimal(80))
+    assert base.entree(id_).releve is None
+    base.joindre_releve(id_, *Base.lire_pdf(fichier))
+    assert base.entree(id_).releve == "releve-2026-10-21.pdf"
+    assert base.lire_releve(id_) == ("releve-2026-10-21.pdf", PDF)
+    base.joindre_releve(id_, "autre.pdf", PDF + b"x")
+    assert base.lire_releve(id_)[0] == "autre.pdf"
+    base.retirer_releve(id_)
+    assert base.lire_releve(id_) is None
+
+
+def test_releve_supprime_avec_entree_et_exporte(base, tmp_path):
+    id_ = base.ajouter_vacances(D(2026, 10, 13), montant=Decimal(10))
+    base.joindre_releve(id_, "r.pdf", PDF)
+    sauvegarde = tmp_path / "s.db"
+    base.exporter(sauvegarde)
+    base.supprimer(id_)
+    assert base.conn.execute("SELECT COUNT(*) FROM releves").fetchone()[0] == 0
+    base.importer(sauvegarde)
+    assert base.lire_releve(id_) == ("r.pdf", PDF)
+
+
+def test_lire_pdf_refuse_autre_chose(tmp_path):
+    texte = tmp_path / "notes.pdf"
+    texte.write_text("pas un pdf")
+    with pytest.raises(ValueError):
+        Base.lire_pdf(texte)
+    with pytest.raises(ValueError):
+        Base.lire_pdf(tmp_path / "absent.pdf")
+
+
+def test_base_version_1_migree(tmp_path):
+    import sqlite3
+    chemin = tmp_path / "v1.db"
+    conn = sqlite3.connect(chemin)
+    conn.executescript("""
+        CREATE TABLE parametres (cle TEXT PRIMARY KEY, valeur TEXT NOT NULL);
+        CREATE TABLE entrees (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, date_debut TEXT NOT NULL,
+            date_fin TEXT, heures TEXT, taux TEXT, pct TEXT, montant_cents INTEGER NOT NULL,
+            note TEXT NOT NULL DEFAULT '', cree_le TEXT NOT NULL DEFAULT (datetime('now')));
+        INSERT INTO entrees (type, date_debut, date_fin, heures, taux, pct, montant_cents)
+            VALUES ('periode', '2026-10-07', '2026-10-21', '80', '25', '4', 8000);
+        PRAGMA user_version = 1;
+    """)
+    conn.close()
+    b = Base(chemin)
+    [e] = b.entrees()
+    assert e.montant == Decimal(80) and e.releve is None
+    b.joindre_releve(e.id, "r.pdf", PDF)
+    assert b.entree(e.id).releve == "r.pdf"
+    b.fermer()

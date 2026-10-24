@@ -1,11 +1,16 @@
 """Interface (Tkinter) du calculateur de vacances."""
 
 import datetime as dt
+import os
 import queue
+import re
+import sys
+import tempfile
 import threading
 import tkinter as tk
 import webbrowser
 from decimal import Decimal
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import __version__, calcul, updater
@@ -33,6 +38,66 @@ def _date_courte(e):
             return f"{e.debut.isoformat()} → {e.fin.strftime('%m-%d')}"
         return f"{e.debut.isoformat()} → {e.fin.isoformat()}"
     return e.debut.isoformat()
+
+
+def _abreger(nom, longueur=28):
+    return nom if len(nom) <= longueur else nom[:longueur - 1] + "…"
+
+
+class ChoixReleve(ttk.Frame):
+    """Choix d'un relevé de paye (PDF) : joindre, remplacer ou retirer."""
+
+    def __init__(self, parent, nom_existant=None):
+        super().__init__(parent, style="Carte.TFrame")
+        self.nom_existant = nom_existant
+        self.chemin = None
+        self.retirer = False
+        self.btn = ttk.Button(self, command=self._choisir)
+        self.btn.pack(side="left")
+        self.lbl = ttk.Label(self, text="", style="Aide.TLabel")
+        self.lbl.pack(side="left", padx=(8, 0))
+        self.btn_x = ttk.Button(self, text="✕", width=3, command=self._effacer)
+        self._maj()
+
+    def _choisir(self):
+        chemin = filedialog.askopenfilename(parent=self.winfo_toplevel(), title="Choisir le relevé de paye",
+                                            filetypes=[("Relevé PDF", "*.pdf"), ("Tous les fichiers", "*.*")])
+        if chemin:
+            self.chemin = chemin
+            self.retirer = False
+            self._maj()
+
+    def _effacer(self):
+        if self.chemin:
+            self.chemin = None
+        else:
+            self.retirer = True
+        self._maj()
+
+    def _maj(self):
+        nom = Path(self.chemin).name if self.chemin else (None if self.retirer else self.nom_existant)
+        self.lbl.configure(text=_abreger(nom) if nom else "aucun relevé")
+        self.btn.configure(text="Remplacer…" if nom else "Joindre le relevé PDF…")
+        if nom:
+            self.btn_x.pack(side="left", padx=(6, 0))
+        else:
+            self.btn_x.pack_forget()
+
+    def reinitialiser(self):
+        self.nom_existant = None
+        self.chemin = None
+        self.retirer = False
+        self._maj()
+
+    def lire(self):
+        """Valide le PDF choisi avant tout enregistrement ; None si aucun."""
+        return Base.lire_pdf(self.chemin) if self.chemin else None
+
+    def appliquer(self, base, id_, pdf):
+        if pdf:
+            base.joindre_releve(id_, *pdf)
+        elif self.retirer:
+            base.retirer_releve(id_)
 
 
 class Dialogue(tk.Toplevel):
@@ -235,8 +300,13 @@ class DialogueVacances(Dialogue):
 
         self.var_note, _ = self.champ(c, 6, "Note (optionnel)", e.note if e else "", largeur=40)
 
+        ttk.Label(c, text="Relevé de paye (optionnel)", style="Champ.TLabel").grid(row=8, column=0, sticky="w",
+                                                                                   pady=(0, 4))
+        self.releve = ChoixReleve(c, e.releve if e else None)
+        self.releve.grid(row=9, column=0, sticky="w", pady=(0, 14))
+
         self.recap = ttk.Frame(c, style="Recap.TFrame", padding=(14, 10))
-        self.recap.grid(row=8, column=0, sticky="we")
+        self.recap.grid(row=10, column=0, sticky="we")
         self.recap.columnconfigure(1, weight=1)
         self.lbl_recap = []
         for i, txt in enumerate(("Solde actuel", "Vacances prises", "Nouveau solde")):
@@ -245,7 +315,7 @@ class DialogueVacances(Dialogue):
             lbl.grid(row=i, column=1, sticky="e", pady=2, padx=(40, 0))
             self.lbl_recap.append(lbl)
         self.lbl_alerte = ttk.Label(c, text="", style="Alerte.TLabel")
-        self.lbl_alerte.grid(row=9, column=0, sticky="w", pady=(8, 0))
+        self.lbl_alerte.grid(row=11, column=0, sticky="w", pady=(8, 0))
 
         self.var_valeur.trace_add("write", lambda *_: self._apercu())
         self._apercu()
@@ -292,12 +362,16 @@ class DialogueVacances(Dialogue):
     def valider(self):
         date = calcul.parse_date(self.var_date.get())
         heures, montant = self._montant()
+        pdf = self.releve.lire()
         base = self.parent.base
         if self.entree:
-            base.modifier_vacances(self.entree.id, date, heures=heures, montant=None if heures else montant,
+            id_ = self.entree.id
+            base.modifier_vacances(id_, date, heures=heures, montant=None if heures else montant,
                                    note=self.var_note.get())
         else:
-            base.ajouter_vacances(date, heures=heures, montant=None if heures else montant, note=self.var_note.get())
+            id_ = base.ajouter_vacances(date, heures=heures, montant=None if heures else montant,
+                                        note=self.var_note.get())
+        self.releve.appliquer(base, id_, pdf)
         self.parent.rafraichir()
         return True
 
@@ -316,6 +390,9 @@ class DialoguePeriode(Dialogue):
         self.var_heures, entree = self.champ(c, 4, "Heures travaillées", calcul.formater_simple(e.heures),
                                              aide=f"Taux de cette période : {calcul.formater_argent(e.taux)} · "
                                                   f"{calcul.formater_simple(e.pct)} %")
+        ttk.Label(c, text="Relevé de paye (PDF)", style="Champ.TLabel").grid(row=7, column=0, sticky="w", pady=(0, 4))
+        self.releve = ChoixReleve(c, e.releve)
+        self.releve.grid(row=8, column=0, sticky="w")
         entree.focus_set()
         entree.select_range(0, "end")
 
@@ -323,7 +400,9 @@ class DialoguePeriode(Dialogue):
         debut = calcul.parse_date(self.var_debut.get())
         fin = calcul.parse_date(self.var_fin.get())
         heures = calcul.parse_nombre(self.var_heures.get())
+        pdf = self.releve.lire()
         self.parent.base.modifier_periode(self.entree.id, debut, fin, heures)
+        self.releve.appliquer(self.parent.base, self.entree.id, pdf)
         self.parent.rafraichir()
         return True
 
@@ -435,7 +514,7 @@ class Application(tk.Tk):
             if col == 2:
                 self.entree_heures = e
         apercu = ttk.Frame(carte, style="Carte.TFrame")
-        apercu.grid(row=3, column=0, columnspan=6, sticky="w", pady=(12, 0))
+        apercu.grid(row=3, column=0, columnspan=3, sticky="w", pady=(12, 0))
         ttk.Label(apercu, text="Vacances pour la période :", style="Calcul.TLabel").pack(side="left", padx=(0, 8))
         self.lbl_formule = ttk.Label(apercu, text="", style="Calcul.TLabel")
         self.lbl_formule.pack(side="left")
@@ -446,6 +525,8 @@ class Application(tk.Tk):
             row=2, column=4, padx=(14, 8))
         ttk.Button(carte, text="−  Déduire des vacances", style="Danger.TButton",
                    command=self.deduire_vacances).grid(row=2, column=5)
+        self.releve_periode = ChoixReleve(carte)
+        self.releve_periode.grid(row=3, column=3, columnspan=3, sticky="e", pady=(12, 0))
         self.var_heures.trace_add("write", lambda *_: self._apercu_periode())
 
         # Historique
@@ -454,15 +535,16 @@ class Application(tk.Tk):
         tete = ttk.Frame(hist, style="Carte.TFrame", padding=(18, 10))
         tete.pack(fill="x")
         ttk.Label(tete, text="Historique", style="SousTitre.TLabel").pack(side="left")
-        ttk.Label(tete, text="Double-clic pour modifier · Suppr pour effacer", style="Aide.TLabel").pack(side="right")
+        ttk.Label(tete, text="Double-clic pour modifier (sur « PDF » pour ouvrir le relevé) · "
+                             "Clic droit pour plus d'options", style="Aide.TLabel").pack(side="right")
 
-        colonnes = ("date", "type", "heures", "montant", "solde")
+        colonnes = ("date", "type", "heures", "montant", "solde", "releve")
         cadre_arbre = ttk.Frame(hist, style="Carte.TFrame")
         cadre_arbre.pack(fill="both", expand=True)
         self.arbre = ttk.Treeview(cadre_arbre, columns=colonnes, show="headings", selectmode="browse")
         for col, txt, larg, ancre in (("date", "Période / date", 200, "w"), ("type", "Type", 220, "w"),
                                       ("heures", "Heures", 90, "e"), ("montant", "Montant", 130, "e"),
-                                      ("solde", "Solde cumulé", 140, "e")):
+                                      ("solde", "Solde cumulé", 140, "e"), ("releve", "Relevé", 80, "center")):
             self.arbre.heading(col, text=txt, anchor=ancre)
             self.arbre.column(col, width=larg, anchor=ancre, stretch=col in ("date", "type"))
         self.arbre.tag_configure("vacances", foreground=ROUGE)
@@ -471,19 +553,30 @@ class Application(tk.Tk):
         self.arbre.configure(yscrollcommand=defil.set)
         self.arbre.pack(side="left", fill="both", expand=True)
         defil.pack(side="right", fill="y")
-        self.arbre.bind("<Double-1>", lambda _e: self.modifier_selection())
+        self.arbre.bind("<Double-1>", self._double_clic)
         self.arbre.bind("<Return>", lambda _e: self.modifier_selection())
         self.arbre.bind("<Delete>", lambda _e: self.supprimer_selection())
 
-        menu = tk.Menu(self, tearoff=False)
-        menu.add_command(label="Modifier…", command=self.modifier_selection)
-        menu.add_command(label="Supprimer", command=self.supprimer_selection)
-
         def menu_contextuel(ev):
             ligne = self.arbre.identify_row(ev.y)
-            if ligne:
-                self.arbre.selection_set(ligne)
-                menu.tk_popup(ev.x_root, ev.y_root)
+            if not ligne:
+                return
+            self.arbre.selection_set(ligne)
+            e = self._entree_selectionnee()
+            menu = tk.Menu(self, tearoff=False)
+            menu.add_command(label="Modifier…", command=self.modifier_selection)
+            if e and e.type != "depart":
+                menu.add_separator()
+                if e.releve:
+                    menu.add_command(label="Ouvrir le relevé", command=self.ouvrir_releve)
+                    menu.add_command(label="Enregistrer le relevé sous…", command=self.enregistrer_releve)
+                    menu.add_command(label="Remplacer le relevé…", command=self.joindre_releve)
+                    menu.add_command(label="Retirer le relevé", command=self.retirer_releve)
+                else:
+                    menu.add_command(label="Joindre un relevé PDF…", command=self.joindre_releve)
+            menu.add_separator()
+            menu.add_command(label="Supprimer", command=self.supprimer_selection)
+            menu.tk_popup(ev.x_root, ev.y_root)
         self.arbre.bind("<Button-3>", menu_contextuel)
 
     def _tuile(self, parent, col, titre, fond, couleur_valeur, couleur_info):
@@ -494,7 +587,7 @@ class Application(tk.Tk):
         tk.Label(cadre, text=titre, bg=fond, fg=couleur_info, font=(POLICE, 9)).pack(anchor="w")
         valeur = tk.Label(cadre, text="", bg=fond, fg=couleur_valeur, font=(POLICE, 20, "bold"))
         valeur.pack(anchor="w")
-        info = tk.Label(cadre, text="", bg=fond, fg=couleur_info, font=(POLICE, 9))
+        info = tk.Label(cadre, text="", bg=fond, fg=couleur_info, font=(POLICE, 9), justify="left")
         info.pack(anchor="w")
         return valeur, info
 
@@ -514,12 +607,12 @@ class Application(tk.Tk):
             info = f"depuis le {premiere.isoformat()}" + (" (incl. solde de départ)" if depart else "")
         else:
             info = "aucune période inscrite"
+        info = f"{self._heures(t.accumule_heures)}\n{info}"
         self.t_accumule[1].configure(text=info)
         self.t_pris[0].configure(text=calcul.formater_argent(-t.pris) if t.pris else calcul.formater_argent(0))
         self.t_pris[1].configure(text=f"{calcul.formater_nombre(t.heures_prises)} h")
         self.t_solde[0].configure(text=calcul.formater_argent(t.solde))
-        self.t_solde[1].configure(
-            text=f"≈ {calcul.formater_nombre(t.solde_heures)} h de vacances" if t.solde_heures is not None else "")
+        self.t_solde[1].configure(text=self._heures(t.solde_heures))
 
         self.arbre.delete(*self.arbre.get_children())
         for e in reversed(entrees):
@@ -527,8 +620,14 @@ class Application(tk.Tk):
             libelle = LIBELLES_TYPE[e.type] + (f" — {e.note}" if e.note else "")
             montant = calcul.formater_argent(e.montant) if e.type == "depart" else calcul.formater_signe(e.montant)
             self.arbre.insert("", "end", iid=str(e.id), tags=(e.type,),
-                              values=(_date_courte(e), libelle, heures, montant, calcul.formater_argent(e.solde)))
+                              values=(_date_courte(e), libelle, heures, montant, calcul.formater_argent(e.solde),
+                                      "PDF" if e.releve else ""))
         self._apercu_periode()
+
+    @staticmethod
+    def _heures(valeur):
+        """Équivalent en heures (montant ÷ taux horaire actuel)."""
+        return f"{calcul.formater_nombre(valeur)} h" if valeur is not None else "— h (taux horaire à entrer)"
 
     def _preremplir_periode(self):
         derniere = self.base.derniere_periode()
@@ -540,6 +639,7 @@ class Application(tk.Tk):
         self.var_debut.set(debut.isoformat())
         self.var_fin.set(fin.isoformat())
         self.var_heures.set("")
+        self.releve_periode.reinitialiser()
         self.entree_heures.focus_set()
 
     def _apercu_periode(self):
@@ -562,11 +662,13 @@ class Application(tk.Tk):
             debut = calcul.parse_date(self.var_debut.get())
             fin = calcul.parse_date(self.var_fin.get())
             heures = calcul.parse_nombre(self.var_heures.get())
+            pdf = self.releve_periode.lire()
             if self.base.periode_existe(debut) and not messagebox.askyesno(
                     "Période existante", f"Une période commençant le {debut.isoformat()} existe déjà.\n"
                                          "L'ajouter quand même ?", parent=self):
                 return
-            self.base.ajouter_periode(debut, fin, heures)
+            id_ = self.base.ajouter_periode(debut, fin, heures)
+            self.releve_periode.appliquer(self.base, id_, pdf)
         except ValueError as err:
             messagebox.showerror("Valeur invalide", str(err), parent=self)
             return
@@ -598,6 +700,64 @@ class Application(tk.Tk):
             DialogueVacances(self, e)
         else:
             self.ouvrir_parametres()
+
+    def _double_clic(self, ev):
+        e = self._entree_selectionnee()
+        if e and e.releve and self.arbre.identify_column(ev.x) == "#6":
+            self.ouvrir_releve()
+        else:
+            self.modifier_selection()
+
+    def ouvrir_releve(self):
+        e = self._entree_selectionnee()
+        releve = self.base.lire_releve(e.id) if e else None
+        if not releve:
+            return
+        nom, contenu = releve
+        dossier = Path(tempfile.gettempdir()) / "CalculateurVacances"
+        dossier.mkdir(exist_ok=True)
+        nom_sur = re.sub(r'[<>:"/\\|?*]', "_", nom)
+        chemin = dossier / f"{e.id}-{nom_sur}"
+        try:
+            chemin.write_bytes(contenu)
+            if sys.platform == "win32":
+                os.startfile(chemin)
+            else:
+                webbrowser.open(chemin.as_uri())
+        except OSError as err:
+            messagebox.showerror("Relevé", f"Impossible d'ouvrir le relevé : {err}", parent=self)
+
+    def enregistrer_releve(self):
+        e = self._entree_selectionnee()
+        releve = self.base.lire_releve(e.id) if e else None
+        if not releve:
+            return
+        chemin = filedialog.asksaveasfilename(parent=self, title="Enregistrer le relevé", initialfile=releve[0],
+                                              defaultextension=".pdf", filetypes=[("Relevé PDF", "*.pdf")])
+        if chemin:
+            Path(chemin).write_bytes(releve[1])
+
+    def joindre_releve(self):
+        e = self._entree_selectionnee()
+        if e is None:
+            return
+        chemin = filedialog.askopenfilename(parent=self, title="Choisir le relevé de paye",
+                                            filetypes=[("Relevé PDF", "*.pdf"), ("Tous les fichiers", "*.*")])
+        if not chemin:
+            return
+        try:
+            self.base.joindre_releve(e.id, *Base.lire_pdf(chemin))
+        except ValueError as err:
+            messagebox.showerror("Relevé", str(err), parent=self)
+            return
+        self.rafraichir()
+        self.arbre.selection_set(str(e.id))
+
+    def retirer_releve(self):
+        e = self._entree_selectionnee()
+        if e and messagebox.askyesno("Relevé", f"Retirer le relevé « {e.releve} » ?", parent=self):
+            self.base.retirer_releve(e.id)
+            self.rafraichir()
 
     def supprimer_selection(self):
         e = self._entree_selectionnee()

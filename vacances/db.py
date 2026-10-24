@@ -10,7 +10,8 @@ from pathlib import Path
 
 from . import calcul
 
-VERSION_SCHEMA = 1
+VERSION_SCHEMA = 2
+TAILLE_MAX_RELEVE = 25 * 1024 * 1024  # 25 Mo
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS parametres (
@@ -28,6 +29,13 @@ CREATE TABLE IF NOT EXISTS entrees (
     montant_cents INTEGER NOT NULL,
     note          TEXT NOT NULL DEFAULT '',
     cree_le       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Relevé de paye (PDF) joint à une entrée, conservé dans la base même.
+CREATE TABLE IF NOT EXISTS releves (
+    entree_id INTEGER PRIMARY KEY,
+    nom       TEXT NOT NULL,
+    contenu   BLOB NOT NULL,
+    ajoute_le TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
 
@@ -58,11 +66,13 @@ class Entree:
     montant: Decimal  # positif = gagné, négatif = vacances prises
     note: str
     solde: Decimal = Decimal(0)
+    releve: str | None = None  # nom du PDF joint
 
 
 @dataclass
 class Totaux:
     accumule: Decimal
+    accumule_heures: Decimal | None
     pris: Decimal
     heures_prises: Decimal
     solde: Decimal
@@ -198,7 +208,41 @@ class Base:
         return None
 
     def supprimer(self, id_):
+        self.conn.execute("DELETE FROM releves WHERE entree_id = ?", (id_,))
         self.conn.execute("DELETE FROM entrees WHERE id = ?", (id_,))
+        self.conn.commit()
+
+    # --- Relevés de paye (PDF) ------------------------------------------------
+
+    @staticmethod
+    def lire_pdf(chemin):
+        """Lit et valide un PDF ; retourne (nom, contenu)."""
+        chemin = Path(chemin)
+        try:
+            contenu = chemin.read_bytes()
+        except OSError as err:
+            raise ValueError(f"Impossible de lire « {chemin.name} » : {err.strerror or err}") from None
+        if b"%PDF-" not in contenu[:1024]:
+            raise ValueError(f"« {chemin.name} » n'est pas un fichier PDF.")
+        if len(contenu) > TAILLE_MAX_RELEVE:
+            raise ValueError(f"« {chemin.name} » est trop volumineux (maximum 25 Mo).")
+        return chemin.name, contenu
+
+    def joindre_releve(self, id_, nom, contenu):
+        self.conn.execute(
+            "INSERT INTO releves (entree_id, nom, contenu) VALUES (?, ?, ?) "
+            "ON CONFLICT(entree_id) DO UPDATE SET nom = excluded.nom, contenu = excluded.contenu, "
+            "ajoute_le = datetime('now')",
+            (id_, nom, sqlite3.Binary(contenu)),
+        )
+        self.conn.commit()
+
+    def lire_releve(self, id_):
+        row = self.conn.execute("SELECT nom, contenu FROM releves WHERE entree_id = ?", (id_,)).fetchone()
+        return (row["nom"], bytes(row["contenu"])) if row else None
+
+    def retirer_releve(self, id_):
+        self.conn.execute("DELETE FROM releves WHERE entree_id = ?", (id_,))
         self.conn.commit()
 
     def entree(self, id_):
@@ -209,7 +253,9 @@ class Base:
 
     def entrees(self):
         """Toutes les entrées en ordre chronologique, avec le solde cumulé."""
-        rows = self.conn.execute("SELECT * FROM entrees").fetchall()
+        rows = self.conn.execute(
+            "SELECT e.*, r.nom AS releve_nom FROM entrees e LEFT JOIN releves r ON r.entree_id = e.id"
+        ).fetchall()
         rows = sorted(rows, key=lambda r: (r["date_debut"], ORDRE_TYPE[r["type"]], r["id"]))
         resultat, solde = [], Decimal(0)
         for r in rows:
@@ -228,6 +274,7 @@ class Base:
                 montant=montant,
                 note=r["note"],
                 solde=solde,
+                releve=r["releve_nom"],
             ))
         return resultat
 
@@ -246,6 +293,7 @@ class Base:
         taux = self.taux
         return Totaux(
             accumule=accumule,
+            accumule_heures=(accumule / taux) if taux > 0 else None,
             pris=pris,
             heures_prises=heures_prises,
             solde=solde,
