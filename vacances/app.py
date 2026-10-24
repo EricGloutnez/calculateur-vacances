@@ -922,21 +922,22 @@ class Application(tk.Tk):
     def _menus(self):
         barre = tk.Menu(self)
         fichier = tk.Menu(barre, tearoff=False)
-        fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
-        fichier.add_separator()
-        fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
-        fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
-        fichier.add_separator()
-        fichier.add_command(label="Quitter", command=self.destroy)
-        barre.add_cascade(label="Fichier", menu=fichier)
+        outils = tk.Menu(fichier, tearoff=False)
+        affichage = tk.Menu(outils, tearoff=False)
 
-        outils = tk.Menu(barre, tearoff=False)
+        # Fichier ▸ Outils ▸ Affichage
+        self.var_voir_soldes = tk.BooleanVar(value=self.base.preference("soldes"))
+        self.var_voir_hist = tk.BooleanVar(value=self.base.preference("historique"))
+        affichage.add_checkbutton(label="Soldes (total, vacances prises, solde)", variable=self.var_voir_soldes,
+                                  command=self._appliquer_affichage)
+        affichage.add_checkbutton(label="Historique", variable=self.var_voir_hist, command=self._appliquer_affichage)
 
         def remplir_outils():
             outils.delete(0, "end")
             outils.add_command(label=f"Pourcentage de vacances ({calcul.formater_simple(self.base.pct)} %)…",
                                command=self.ouvrir_pourcentage)
             outils.add_command(label="Paramètres…", command=self.ouvrir_parametres)
+            outils.add_cascade(label="Affichage", menu=affichage)
             outils.add_separator()
             if self.base.a_mot_de_passe:
                 outils.add_command(label="Changer le mot de passe…", command=lambda: self.mot_de_passe(False))
@@ -945,15 +946,16 @@ class Application(tk.Tk):
                 outils.add_command(label="Définir un mot de passe…", command=lambda: self.mot_de_passe(False))
         outils.configure(postcommand=remplir_outils)
         remplir_outils()
-        barre.add_cascade(label="Outils", menu=outils)
 
-        affichage = tk.Menu(barre, tearoff=False)
-        self.var_voir_soldes = tk.BooleanVar(value=self.base.preference("soldes"))
-        self.var_voir_hist = tk.BooleanVar(value=self.base.preference("historique"))
-        affichage.add_checkbutton(label="Soldes (total, vacances prises, solde)", variable=self.var_voir_soldes,
-                                  command=self._appliquer_affichage)
-        affichage.add_checkbutton(label="Historique", variable=self.var_voir_hist, command=self._appliquer_affichage)
-        barre.add_cascade(label="Affichage", menu=affichage)
+        fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
+        fichier.add_separator()
+        fichier.add_cascade(label="Outils", menu=outils)
+        fichier.add_separator()
+        fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
+        fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
+        fichier.add_separator()
+        fichier.add_command(label="Quitter", command=self.destroy)
+        barre.add_cascade(label="Fichier", menu=fichier)
 
         aide = tk.Menu(barre, tearoff=False)
         aide.add_command(label="Vérifier les mises à jour", command=lambda: self.verifier_maj(silencieux=False))
