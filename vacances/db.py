@@ -223,15 +223,19 @@ class Base:
         self.conn.commit()
         return cur.lastrowid
 
-    def modifier_periode(self, id_, debut, fin, heures, ferie=None):
+    def modifier_periode(self, id_, debut, fin, heures, ferie=None, taux=None):
+        """Modifie une période ; `taux` None garde le taux de la période."""
         heures = Decimal(heures)
         ferie = self._valider_ferie(ferie)
         self._valider_periode(debut, fin, heures)
         e = self.entree(id_)
-        montant = calcul.vacances_periode(heures, e.taux, e.pct, ferie)
+        taux = Decimal(taux) if taux is not None else e.taux
+        montant = calcul.vacances_periode(heures, taux, e.pct, ferie)
         self.conn.execute(
-            "UPDATE entrees SET date_debut = ?, date_fin = ?, heures = ?, montant_cents = ?, ferie = ? WHERE id = ?",
-            (debut.isoformat(), fin.isoformat(), str(heures), calcul.en_cents(montant), _str_ou_none(ferie), id_),
+            "UPDATE entrees SET date_debut = ?, date_fin = ?, heures = ?, taux = ?, montant_cents = ?, ferie = ? "
+            "WHERE id = ?",
+            (debut.isoformat(), fin.isoformat(), str(heures), str(taux), calcul.en_cents(montant),
+             _str_ou_none(ferie), id_),
         )
         self.conn.commit()
 
@@ -419,7 +423,8 @@ class Base:
             if heures <= 0:
                 raise ValueError("Le nombre d'heures doit être plus grand que 0.")
             if self.taux <= 0:
-                raise ValueError("Entre d'abord ton taux horaire dans les paramètres.")
+                raise ValueError("Le taux horaire n'est pas encore connu : ajoute d'abord une période avec son "
+                                 "relevé de paye, ou entre les vacances prises en $.")
             return heures, calcul.montant_heures(heures, self.taux)
         if montant is None or Decimal(montant) <= 0:
             raise ValueError("Le montant doit être plus grand que 0.")

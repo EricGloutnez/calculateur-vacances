@@ -2,16 +2,15 @@
 
 Petite application Windows pour contre-vérifier ses vacances accumulées.
 
-- Le **% de vacances** se règle dans **Fichier → Outils → Pourcentage de vacances**. Le **taux horaire** est
-  calculé à partir du relevé de paye (montant brut des heures ÷ nombre d'heures) ; sans relevé, celui de
-  Outils → Paramètres est utilisé.
+- Le **% de vacances** se règle dans **Fichier → Outils → Pourcentage de vacances**. Le **taux horaire** n'est
+  jamais entré à la main : il est calculé à partir de chaque relevé de paye (montant brut des heures ÷ heures).
 - La **paie de férié** du relevé (« Congé Férié ») est lue et comptée dans le calcul :
   vacances = (heures × taux + férié) × %.
 - À chaque paye, entre le **nombre d'heures** de la période : l'application affiche
   les vacances gagnées pour la période (`(heures × taux + férié) × %`) et le **total cumulé**.
 - Quand tu prends des vacances : **Fichier → J'ai pris des vacances** (Ctrl+D), en heures ou en $.
 - L'historique montre le solde cumulé ligne par ligne. Double-clic pour modifier, Suppr pour effacer.
-- Optionnel : un **mot de passe** demandé à l'ouverture (Paramètres → Mot de passe à l'ouverture).
+- Optionnel : un **mot de passe** demandé à l'ouverture (Fichier → Outils → Définir un mot de passe).
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
 - **Confidentiel** (à droite de la barre de menus) cache tous les chiffres, pour une démonstration.
 - **Fichier → Outils → Affichage** permet de masquer ou d'afficher les soldes et l'historique.
@@ -21,6 +20,9 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - Tu peux **joindre le relevé de paye (PDF)** à une période ou à des vacances prises.
   Il est conservé dans la base de l'application sous un nom neutre (`Releve_<début>_au_<fin>.pdf`) ;
   clic droit sur la ligne pour l'ouvrir ou l'enregistrer.
+- **Fichier → Outils → Revalider les relevés enregistrés** relit tous les relevés joints et liste ce qui
+  ne concorde pas (dates, heures, taux, férié), avec correction en un clic.
+- **Fichier → Outils → Solde de départ** reprend un solde déjà inscrit sur ton talon de paye.
 
 ## Télécharger
 
@@ -42,7 +44,7 @@ et les deux raccourcis (tes données restent dans `%APPDATA%\CalculateurVacances
 
 La base de données (SQLite) est intégrée à l'application et enregistrée dans
 `%APPDATA%\CalculateurVacances\vacances.db`. Elle contient aussi les relevés PDF joints et est conservée lors des mises à jour.
-Dans Paramètres, **Exporter / Importer** permet de faire une sauvegarde ou de passer
+**Fichier → Exporter / Importer une sauvegarde** permet de faire une sauvegarde ou de passer
 à un autre ordinateur.
 
 ## Mises à jour automatiques

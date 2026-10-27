@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, calcul, installation, releve, updater
+from . import __version__, calcul, installation, releve, revalidation, updater
 from .db import Base
 
 VERT = "#1F6F5C"
@@ -348,108 +348,113 @@ class Dialogue(tk.Toplevel):
         return var, entree
 
 
-class DialogueParametres(Dialogue):
-    titre = "Paramètres"
+class DialogueSoldeDepart(Dialogue):
+    """Solde de vacances déjà inscrit sur le talon de paye au moment de commencer le suivi."""
+
+    titre = "Solde de départ"
 
     def construire(self, c):
         base = self.parent.base
-        self.var_taux, e_taux = self.champ(c, 0, "Taux horaire ($ / heure)", calcul.formater_nombre(base.taux))
-
-        ttk.Label(c, text="Pourcentage de vacances (%)", style="Champ.TLabel").grid(row=2, column=0, sticky="w", pady=(0, 4))
-        ligne_pct = ttk.Frame(c, style="Carte.TFrame")
-        ligne_pct.grid(row=3, column=0, sticky="w", pady=(0, 14))
-        self.var_pct = tk.StringVar(value=calcul.formater_simple(base.pct))
-        ttk.Entry(ligne_pct, textvariable=self.var_pct, width=8, font=(POLICE, 11)).pack(side="left")
-        for p in ("4", "6", "8"):
-            ttk.Button(ligne_pct, text=f"{p} %", width=5, command=lambda p=p: self.var_pct.set(p)).pack(side="left", padx=(8, 0))
-
         depart = base.solde_depart()
-        ttk.Label(c, text="Solde de départ (optionnel)", style="Champ.TLabel").grid(row=4, column=0, sticky="w", pady=(0, 4))
-        ligne_dep = ttk.Frame(c, style="Carte.TFrame")
-        ligne_dep.grid(row=5, column=0, sticky="w")
+        ttk.Label(c, text="Solde de départ ($)", style="Champ.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        ligne = ttk.Frame(c, style="Carte.TFrame")
+        ligne.grid(row=1, column=0, sticky="w")
         self.var_depart = tk.StringVar(value=calcul.formater_nombre(depart.montant) if depart else "0,00")
-        self.var_date_depart = tk.StringVar(value=(depart.debut if depart else dt.date(dt.date.today().year, 1, 1)).isoformat())
-        self.e_depart = ttk.Entry(ligne_dep, textvariable=self.var_depart, width=12, font=(POLICE, 11))
-        self.e_depart.pack(side="left")
-        ttk.Label(ligne_dep, text=" $  au ", style="Carte.TLabel").pack(side="left")
-        ChampDate(ligne_dep, self.var_date_depart).pack(side="left")
-        ttk.Label(c, text="Pour reprendre un solde déjà inscrit sur ton talon de paye.", style="Aide.TLabel").grid(
-            row=6, column=0, sticky="w", pady=(2, 10))
-
-        ttk.Label(
-            c,
-            text="Un changement de taux s'applique aux nouvelles entrées seulement :\n"
-                 "l'historique garde le taux en vigueur à ce moment-là.",
-            style="Note.TLabel", padding=10,
-        ).grid(row=7, column=0, sticky="we", pady=(0, 16))
-
-        ttk.Separator(c).grid(row=8, column=0, sticky="we", pady=(0, 12))
-        ttk.Label(c, text=f"Version {__version__} (mise à jour automatique)", style="Aide.TLabel").grid(
-            row=9, column=0, sticky="w", pady=(0, 12))
-
-        ttk.Label(c, text="Sauvegarde", style="Champ.TLabel").grid(row=12, column=0, sticky="w", pady=(0, 6))
-        ligne_s = ttk.Frame(c, style="Carte.TFrame")
-        ligne_s.grid(row=13, column=0, sticky="w")
-        ttk.Button(ligne_s, text="Exporter…", command=self._exporter).pack(side="left")
-        ttk.Button(ligne_s, text="Importer…", command=self._importer).pack(side="left", padx=(8, 0))
-        ttk.Label(c, text=f"Données : {base.chemin}", style="Aide.TLabel", wraplength=440).grid(
-            row=14, column=0, sticky="w", pady=(8, 0))
-
-        ttk.Separator(c).grid(row=15, column=0, sticky="we", pady=(14, 12))
-        ttk.Label(c, text="Mot de passe à l'ouverture", style="Champ.TLabel").grid(row=16, column=0, sticky="w",
-                                                                                   pady=(0, 6))
-        self.ligne_mdp = ttk.Frame(c, style="Carte.TFrame")
-        self.ligne_mdp.grid(row=17, column=0, sticky="we")
-        self._maj_mdp()
-        if self.parent.confidentiel:
-            e_taux.configure(show="•")
-            self.e_depart.configure(show="•")
-        e_taux.focus_set()
-        e_taux.select_range(0, "end")
+        self.var_date = tk.StringVar(
+            value=(depart.debut if depart else dt.date(dt.date.today().year, 1, 1)).isoformat())
+        entree = ttk.Entry(ligne, textvariable=self.var_depart, width=12, font=(POLICE, 11),
+                           show="•" if self.parent.confidentiel else "")
+        entree.pack(side="left")
+        ttk.Label(ligne, text=" $  au ", style="Carte.TLabel").pack(side="left")
+        ChampDate(ligne, self.var_date).pack(side="left")
+        ttk.Label(c, text="Pour reprendre un solde déjà inscrit sur ton talon de paye (0 = aucun).",
+                  style="Aide.TLabel").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        entree.focus_set()
+        entree.select_range(0, "end")
 
     def valider(self):
-        base = self.parent.base
-        taux = calcul.parse_nombre(self.var_taux.get())
-        pct = calcul.parse_nombre(self.var_pct.get())
-        depart = calcul.parse_nombre(self.var_depart.get() or "0")
-        date_depart = calcul.parse_date(self.var_date_depart.get())
-        if taux <= 0:
-            raise ValueError("Le taux horaire doit être plus grand que 0.")
-        if depart < 0:
+        montant = calcul.parse_nombre(self.var_depart.get() or "0")
+        if montant < 0:
             raise ValueError("Le solde de départ ne peut pas être négatif.")
-        base.taux = taux
-        base.pct = pct
-        base.definir_solde_depart(depart, date_depart)
+        self.parent.base.definir_solde_depart(montant, calcul.parse_date(self.var_date.get()))
         self.parent.rafraichir()
         return True
 
-    def _maj_mdp(self):
-        for w in self.ligne_mdp.winfo_children():
-            w.destroy()
-        if self.parent.base.a_mot_de_passe:
-            ttk.Label(self.ligne_mdp, text="Activé : demandé à chaque ouverture", style="Aide.TLabel").pack(side="left")
-            ttk.Button(self.ligne_mdp, text="Retirer", command=lambda: self._mot_de_passe(True)).pack(side="right")
-            ttk.Button(self.ligne_mdp, text="Changer…", command=lambda: self._mot_de_passe(False)).pack(
-                side="right", padx=(0, 8))
+
+class DialogueRevalidation(tk.Toplevel):
+    """Résultat de la relecture des relevés enregistrés, avec correction en un clic."""
+
+    def __init__(self, parent, rapport):
+        super().__init__(parent)
+        self.parent = parent
+        self.rapport = rapport
+        self.title("Revalider les relevés")
+        self.configure(bg=BLANC)
+        self.transient(parent)
+        c = ttk.Frame(self, style="Carte.TFrame", padding=20)
+        c.pack(fill="both", expand=True)
+        n, ecarts = rapport.verifies, rapport.ecarts
+        resume = f"{n} relevé{'s' if n > 1 else ''} relu{'s' if n > 1 else ''}"
+        if ecarts:
+            periodes = len({e.entree.id for e in ecarts})
+            resume += f" · {periodes} période{'s' if periodes > 1 else ''} à corriger"
         else:
-            ttk.Label(self.ligne_mdp, text="Aucun (optionnel)", style="Aide.TLabel").pack(side="left")
-            ttk.Button(self.ligne_mdp, text="Définir un mot de passe…",
-                       command=lambda: self._mot_de_passe(False)).pack(side="right")
+            resume += " · tout concorde avec ce qui est enregistré"
+        if rapport.illisibles:
+            resume += f" · {len(rapport.illisibles)} illisible{'s' if len(rapport.illisibles) > 1 else ''}"
+        ttk.Label(c, text=resume, style="SousTitre.TLabel").pack(anchor="w", pady=(0, 12))
 
-    def _mot_de_passe(self, retirer):
-        dialogue = DialogueMotDePasse(self, self.parent.base, retirer)
-        self.wait_window(dialogue)
-        if self.winfo_exists():
-            self.grab_set()
-            self._maj_mdp()
+        if ecarts:
+            cadre = ttk.Frame(c, style="Carte.TFrame")
+            cadre.pack(fill="both", expand=True)
+            arbre = ttk.Treeview(cadre, columns=("periode", "element", "avant", "apres"), show="headings",
+                                 height=min(12, len(ecarts)))
+            for col, txt, larg in (("periode", "Période", 190), ("element", "Élément", 90),
+                                   ("avant", "Enregistré", 130), ("apres", "Selon le relevé", 130)):
+                arbre.heading(col, text=txt, anchor="w")
+                arbre.column(col, width=larg, anchor="w")
+            cache = parent.confidentiel
+            for e in ecarts:
+                arbre.insert("", "end", values=(_date_courte(e.entree), e.element,
+                                                calcul.masquer(self._texte(e.element, e.enregistre), cache),
+                                                calcul.masquer(self._texte(e.element, e.selon_releve), cache)))
+            arbre.pack(fill="both", expand=True)
+        for e in rapport.illisibles:
+            ttk.Label(c, text=f"Relevé illisible (PDF numérisé ?) : {_date_courte(e)}", style="Aide.TLabel").pack(
+                anchor="w", pady=(6, 0))
 
-    def _exporter(self):
-        self.parent.exporter_sauvegarde(parent=self)
+        pied = ttk.Frame(self, style="Pied.TFrame", padding=(20, 12))
+        pied.pack(fill="x")
+        if ecarts:
+            ttk.Button(pied, text="Corriger selon les relevés", style="Primaire.TButton",
+                       command=self._corriger).pack(side="right")
+        ttk.Button(pied, text="Fermer", command=self.destroy).pack(side="right", padx=(0, 8))
+        self.bind("<Escape>", lambda _e: self.destroy())
+        self.update_idletasks()
+        x = parent.winfo_rootx() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_rooty() + (parent.winfo_height() - self.winfo_height()) // 3
+        self.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+        self.grab_set()
 
-    def _importer(self):
-        if self.parent.importer_sauvegarde(parent=self):
-            self.destroy()
-            messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self.parent)
+    @staticmethod
+    def _texte(element, valeur):
+        if valeur is None:
+            return "—"
+        if element in ("Début", "Fin"):
+            return valeur.isoformat()
+        if element == "Heures":
+            return f"{calcul.formater_nombre(valeur)} h"
+        if element == "Taux":
+            return f"{calcul.formater_argent(valeur)}/h"
+        return calcul.formater_argent(valeur)
+
+    def _corriger(self):
+        nombre = revalidation.appliquer(self.parent.base, self.rapport.ecarts)
+        self.parent.rafraichir()
+        self.destroy()
+        messagebox.showinfo("Revalider les relevés",
+                            f"{nombre} période{'s' if nombre > 1 else ''} corrigée{'s' if nombre > 1 else ''} "
+                            "selon les relevés.", parent=self.parent)
 
 
 class DialoguePourcentage(Dialogue):
@@ -705,9 +710,9 @@ class Application(tk.Tk):
             self.after(300, self._premier_lancement)
 
     def _premier_lancement(self):
-        """Paramètres ouverts une seule fois, au tout premier lancement."""
+        """Au tout premier lancement : choisir le % de vacances (le taux, lui, vient du relevé)."""
         self.base.marquer_premier_lancement()
-        self.ouvrir_parametres()
+        self.ouvrir_pourcentage()
 
     def _ecran_connexion(self, vient_d_installer):
         ecran = ttk.Frame(self)
@@ -946,7 +951,8 @@ class Application(tk.Tk):
             outils.add_command(label=calcul.masquer(f"Pourcentage de vacances ({calcul.formater_simple(self.base.pct)} %)…",
                                                     self.confidentiel),
                                command=self.ouvrir_pourcentage)
-            outils.add_command(label="Paramètres…", command=self.ouvrir_parametres)
+            outils.add_command(label="Solde de départ…", command=self.ouvrir_solde_depart)
+            outils.add_command(label="Revalider les relevés enregistrés…", command=self.revalider_releves)
             outils.add_cascade(label="Affichage", menu=affichage)
             outils.add_separator()
             if self.base.a_mot_de_passe:
@@ -1061,7 +1067,7 @@ class Application(tk.Tk):
     @staticmethod
     def _heures(valeur):
         """Équivalent en heures (montant ÷ taux horaire actuel)."""
-        return f"{calcul.formater_nombre(valeur)} h" if valeur is not None else "— h (taux horaire à entrer)"
+        return f"{calcul.formater_nombre(valeur)} h" if valeur is not None else "— h (taux lu au premier relevé)"
 
     def _preremplir_periode(self):
         derniere = self.base.derniere_periode()
@@ -1189,7 +1195,7 @@ class Application(tk.Tk):
             pdf = self.releve_periode.lire()
             taux = self._taux_releve(heures) if pdf else None
             if taux is None and self.base.taux <= 0:
-                raise ValueError("Joins le relevé de paye, ou entre ton taux horaire dans Outils → Paramètres.")
+                raise ValueError("Joins le relevé de paye : le taux horaire y est calculé.")
             if pdf and self._analyse is not None:
                 v = releve.verifier(self._analyse, heures, debut, fin)
                 if v.statut == "attention" and not messagebox.askyesno(
@@ -1262,8 +1268,21 @@ class Application(tk.Tk):
     def ouvrir_pourcentage(self):
         DialoguePourcentage(self)
 
-    def ouvrir_parametres(self):
-        DialogueParametres(self)
+    def ouvrir_solde_depart(self):
+        DialogueSoldeDepart(self)
+
+    def revalider_releves(self):
+        self.configure(cursor="watch")
+        self.update_idletasks()
+        try:
+            rapport = revalidation.revalider(self.base)
+        finally:
+            self.configure(cursor="")
+        if not rapport.verifies and not rapport.illisibles:
+            messagebox.showinfo("Revalider les relevés", "Aucun relevé de paye n'est joint aux périodes.",
+                                parent=self)
+            return
+        DialogueRevalidation(self, rapport)
 
     def _entree_selectionnee(self):
         sel = self.arbre.selection()
@@ -1283,7 +1302,7 @@ class Application(tk.Tk):
         elif e.type == "vacances":
             DialogueVacances(self, e)
         else:
-            self.ouvrir_parametres()
+            self.ouvrir_solde_depart()
 
     def _double_clic(self, ev):
         e = self._entree_selectionnee()
