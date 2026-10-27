@@ -1079,17 +1079,10 @@ class Application(tk.Tk):
         base = self.base
         t = base.totaux()
         entrees = base.entrees()
-        depart = next((e for e in entrees if e.type == "depart"), None)
-        premiere = entrees[0].debut if entrees else None
 
         c = self.confidentiel
         self.t_accumule[0].configure(text=calcul.masquer(calcul.formater_argent(t.accumule), c))
-        if premiere:
-            info = f"depuis le {premiere.isoformat()}" + (" (incl. solde de départ)" if depart else "")
-        else:
-            info = "aucune période inscrite"
-        info = f"{calcul.masquer(self._heures(t.accumule_heures), c)}\n{info}"
-        self.t_accumule[1].configure(text=info)
+        self.t_accumule[1].configure(text=calcul.masquer(self._heures(t.accumule_heures), c))
         self.t_pris[0].configure(text=calcul.masquer(calcul.formater_argent(-t.pris) if t.pris else calcul.formater_argent(0), c))
         self.t_pris[1].configure(text=calcul.masquer(f"{calcul.formater_nombre(t.heures_prises)} h", c))
         self.t_solde[0].configure(text=calcul.masquer(calcul.formater_argent(t.solde), c))
