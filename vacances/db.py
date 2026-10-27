@@ -161,6 +161,24 @@ class Base:
         self._set_param("version_installee", valeur)
 
     @property
+    def embauche(self):
+        """Date d'embauche ; None : jamais demandée ; "" : non fournie."""
+        valeur = self._param("embauche")
+        if valeur in (None, ""):
+            return valeur
+        return dt.date.fromisoformat(valeur)
+
+    @embauche.setter
+    def embauche(self, valeur):
+        self._set_param("embauche", valeur.isoformat() if valeur else "")
+
+    def rappel_fait(self, cle):
+        return self._param(f"rappel_{cle}") == "1"
+
+    def marquer_rappel(self, cle):
+        self._set_param(f"rappel_{cle}", "1")
+
+    @property
     def dossier_sauvegarde(self):
         """None : jamais demandé ; "" : pas de sauvegarde automatique ; sinon le dossier choisi."""
         return self._param("dossier_sauvegarde")
@@ -247,6 +265,19 @@ class Base:
              _str_ou_none(ferie), id_),
         )
         self.conn.commit()
+
+    def changer_pct_periodes(self, debut, fin, pct):
+        """Applique un nouveau % aux périodes qui se terminent entre deux dates ; retourne leur nombre."""
+        pct = Decimal(pct)
+        n = 0
+        for e in self.entrees():
+            if e.type == "periode" and debut <= (e.fin or e.debut) <= fin and e.pct != pct:
+                montant = calcul.vacances_periode(e.heures, e.taux, pct, e.ferie)
+                self.conn.execute("UPDATE entrees SET pct = ?, montant_cents = ? WHERE id = ?",
+                                  (str(pct), calcul.en_cents(montant), e.id))
+                n += 1
+        self.conn.commit()
+        return n
 
     def ajouter_vacances(self, date, heures=None, montant=None, note=""):
         heures, montant = self._valeur_vacances(heures, montant)

@@ -93,3 +93,27 @@ CHIFFRES = re.compile(r"\d(?:[\d\u00a0 ,.]*\d)?")
 def masquer(texte, actif):
     """Mode confidentiel : chaque nombre devient « ••• » (pour une démonstration)."""
     return CHIFFRES.sub("•••", texte) if actif else texte
+
+
+# --- Année de référence (Loi sur les normes du travail du Québec) ---------------------
+
+def annee_reference(date):
+    """Année de référence du 1er mai au 30 avril contenant `date` : (début, fin)."""
+    an = date.year if date.month >= 5 else date.year - 1
+    return dt.date(an, 5, 1), dt.date(an + 1, 4, 30)
+
+
+def libelle_annee(debut):
+    return f"{debut.year}-{debut.year + 1}"
+
+
+def annees_service(embauche, au):
+    """Années complètes de service continu entre l'embauche et une date."""
+    annees = au.year - embauche.year - ((au.month, au.day) < (embauche.month, embauche.day))
+    return max(annees, 0)
+
+
+def pourcentage_selon_service(embauche, annee_debut):
+    """4 % ; 6 % quand le service atteint 3 ans à la fin de l'année de référence."""
+    _debut, fin = annee_reference(annee_debut)
+    return Decimal(6) if annees_service(embauche, fin) >= 3 else Decimal(4)

@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, calcul, importation, installation, releve, revalidation, sauvegarde, updater
+from . import __version__, calcul, importation, installation, rapport, releve, revalidation, sauvegarde, updater
 from .db import Base
 
 VERT = "#1F6F5C"
@@ -381,6 +381,25 @@ class DialogueSoldeDepart(Dialogue):
         return True
 
 
+class DialogueEmbauche(Dialogue):
+    titre = "Date d'embauche"
+
+    def construire(self, c):
+        embauche = self.parent.base.embauche
+        self.var_date = tk.StringVar(value=embauche.isoformat() if embauche else "")
+        ttk.Label(c, text="Date d'embauche", style="Champ.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        champ = ChampDate(c, self.var_date)
+        champ.grid(row=1, column=0, sticky="w")
+        ttk.Label(c, text="Sert au rappel du passage à 6 % (3 ans de service continu au 30 avril).",
+                  style="Aide.TLabel").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        champ.entree.focus_set()
+
+    def valider(self):
+        texte = self.var_date.get().strip()
+        self.parent.base.embauche = calcul.parse_date(texte) if texte else None
+        return True
+
+
 class DialogueRevalidation(tk.Toplevel):
     """Résultat de la relecture des relevés enregistrés, avec correction en un clic."""
 
@@ -705,8 +724,8 @@ class Application(tk.Tk):
         self.after(150, self._sonder_maj)
         self.verifier_maj()
         self.protocol("WM_DELETE_WINDOW", self.quitter)
-        if self.base.premier_lancement_fait and self.base.dossier_sauvegarde is None:
-            self.after(600, self._demander_dossier_sauvegarde)
+        if self.base.premier_lancement_fait:
+            self.after(600, self._questions_demarrage)
         if vient_d_installer:
             self.after(300, self._bienvenue_installation)
         elif not self.base.premier_lancement_fait:
@@ -899,6 +918,7 @@ class Application(tk.Tk):
             self.arbre.column(col, width=larg, anchor=ancre, stretch=col in ("date", "type"))
         self.arbre.tag_configure("vacances", foreground=ROUGE)
         self.arbre.tag_configure("depart", foreground=GRIS)
+        self.arbre.tag_configure("annee", background="#EEF1EF", font=(POLICE, 10, "bold"))
         defil = ttk.Scrollbar(cadre_arbre, orient="vertical", command=self.arbre.yview)
         self.arbre.configure(yscrollcommand=defil.set)
         self.arbre.pack(side="left", fill="both", expand=True)
@@ -913,6 +933,8 @@ class Application(tk.Tk):
                 return
             self.arbre.selection_set(ligne)
             e = self._entree_selectionnee()
+            if e is None:  # ligne d'année de référence
+                return
             elements = [("Modifier…", self.modifier_selection)]
             if e and e.type != "depart":
                 elements.append(None)
@@ -957,6 +979,7 @@ class Application(tk.Tk):
             outils.add_command(label="Solde de départ…", command=self.ouvrir_solde_depart)
             outils.add_command(label="Revalider les relevés enregistrés…", command=self.revalider_releves)
             outils.add_command(label="Dossier de sauvegarde…", command=self.choisir_dossier_sauvegarde)
+            outils.add_command(label="Date d'embauche…", command=self.ouvrir_embauche)
             outils.add_cascade(label="Affichage", menu=affichage)
             outils.add_separator()
             if self.base.a_mot_de_passe:
@@ -975,6 +998,8 @@ class Application(tk.Tk):
         fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
         fichier.add_separator()
         fichier.add_cascade(label="Outils", menu=outils)
+        fichier.add_separator()
+        fichier.add_command(label="Exporter un rapport (Excel)…", command=self.exporter_rapport)
         fichier.add_separator()
         fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
         fichier.add_command(label="Restaurer une sauvegarde…", command=self._importer_depuis_menu)
@@ -1058,16 +1083,26 @@ class Application(tk.Tk):
         self.t_solde[1].configure(text=calcul.masquer(self._heures(t.solde_heures), c))
 
         self.arbre.delete(*self.arbre.get_children())
+        for annee in reversed(rapport.par_annee(entrees)):
+            parent = self.arbre.insert(
+                "", "end", iid=f"annee-{annee.debut.year}", open=True, tags=("annee",),
+                values=(f"Année {annee.libelle}",
+                        calcul.masquer(f"Gagné {calcul.formater_argent(annee.gagne)}  ·  "
+                                       f"Pris {calcul.formater_argent(annee.pris)}", c),
+                        "", "", calcul.masquer(calcul.formater_argent(annee.solde_fin), c), ""))
+            self._lignes_annee(parent, annee.entrees, c)
+        self._apercu_periode()
+
+    def _lignes_annee(self, parent, entrees, c):
         for e in reversed(entrees):
             heures = calcul.formater_nombre(e.heures) if e.heures is not None else "—"
             libelle = LIBELLES_TYPE[e.type] + (f" — {e.note}" if e.note else "")
             if e.ferie:
                 libelle += calcul.masquer(f" + férié {calcul.formater_argent(e.ferie)}", c)
             montant = calcul.formater_argent(e.montant) if e.type == "depart" else calcul.formater_signe(e.montant)
-            self.arbre.insert("", "end", iid=str(e.id), tags=(e.type,),
+            self.arbre.insert(parent, "end", iid=str(e.id), tags=(e.type,),
                               values=(_date_courte(e), libelle, calcul.masquer(heures, c), calcul.masquer(montant, c),
                                       calcul.masquer(calcul.formater_argent(e.solde), c), "PDF" if e.releve else ""))
-        self._apercu_periode()
 
     @staticmethod
     def _heures(valeur):
@@ -1260,6 +1295,62 @@ class Application(tk.Tk):
         if self.importer_sauvegarde():
             messagebox.showinfo("Restaurer", "Sauvegarde restaurée.", parent=self)
 
+    def _questions_demarrage(self):
+        """Questions posées une seule fois, puis rappel du 6 % quand il s'applique."""
+        if self.base.dossier_sauvegarde is None:
+            self._demander_dossier_sauvegarde()
+        if self.base.embauche is None:
+            if messagebox.askyesno(
+                    "Date d'embauche",
+                    "Veux-tu entrer ta date d'embauche ?\n\nAu Québec, après 3 ans de service continu, "
+                    "les vacances passent de 4 % à 6 % ; l'application pourra te le rappeler.", parent=self):
+                self.wait_window(DialogueEmbauche(self))
+            if self.base.embauche is None:
+                self.base.embauche = None  # « plus tard » : ne plus demander
+        self._rappel_6_pct()
+
+    def _rappel_6_pct(self):
+        embauche = self.base.embauche
+        if not embauche or self.base.pct >= 6:
+            return
+        debut, fin = calcul.annee_reference(dt.date.today())
+        cle = f"6pct_{debut.year}"
+        if calcul.pourcentage_selon_service(embauche, debut) < 6 or self.base.rappel_fait(cle):
+            return
+        self.base.marquer_rappel(cle)
+        ans = calcul.annees_service(embauche, fin)
+        if messagebox.askyesno(
+                "Vacances à 6 %",
+                f"Au {fin.day} avril {fin.year}, tu auras {ans} ans de service continu : pour l'année de "
+                f"référence {calcul.libelle_annee(debut)} (1er mai {debut.year} au 30 avril {fin.year}), "
+                "l'indemnité de vacances est de 6 % (3 semaines).\n\n"
+                "Passer à 6 % maintenant, y compris pour les périodes déjà inscrites de cette année ?",
+                parent=self):
+            self.base.pct = Decimal(6)
+            n = self.base.changer_pct_periodes(debut, fin, Decimal(6))
+            self.rafraichir()
+            messagebox.showinfo("Vacances à 6 %", f"Pourcentage réglé à 6 % ; {n} période{'s' if n > 1 else ''} "
+                                                 "de l'année recalculée" + ("s." if n > 1 else "."), parent=self)
+
+    def ouvrir_embauche(self):
+        d = DialogueEmbauche(self)
+        self.wait_window(d)
+        self._rappel_6_pct()
+
+    def exporter_rapport(self):
+        nom = f"rapport-vacances-{dt.date.today().isoformat()}.csv"
+        chemin = filedialog.asksaveasfilename(parent=self, title="Exporter un rapport", initialfile=nom,
+                                              defaultextension=".csv", filetypes=[("Excel (CSV)", "*.csv")])
+        if not chemin:
+            return
+        try:
+            annees = rapport.exporter_csv(self.base, chemin)
+        except OSError as err:
+            messagebox.showerror("Rapport", f"Impossible d'écrire le rapport :\n{err}", parent=self)
+            return
+        messagebox.showinfo("Rapport", f"Rapport exporté ({len(annees)} année{'s' if len(annees) > 1 else ''} "
+                                       f"de référence).\nIl s'ouvre dans Excel.", parent=self)
+
     # --- Sauvegarde automatique ---------------------------------------------------
 
     def _demander_dossier_sauvegarde(self):
@@ -1370,7 +1461,7 @@ class Application(tk.Tk):
             return None
         try:
             return self.base.entree(int(sel[0]))
-        except KeyError:
+        except (KeyError, ValueError):  # ligne d'année de référence
             return None
 
     def modifier_selection(self):

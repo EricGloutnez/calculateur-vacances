@@ -26,6 +26,10 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - **Fichier → Outils → Revalider les relevés enregistrés** relit tous les relevés joints et liste ce qui
   ne concorde pas (dates, heures, taux, férié), avec correction en un clic.
 - **Fichier → Outils → Solde de départ** reprend un solde déjà inscrit sur ton talon de paye.
+- L'historique est regroupé par **année de référence** (1er mai au 30 avril) avec le gagné, le pris et le solde.
+- **Fichier → Exporter un rapport (Excel)** : détail et sommaire par année de référence, à présenter à la paie.
+- **Fichier → Outils → Date d'embauche** : l'application rappelle le passage de 4 % à **6 %** quand tu atteins
+  3 ans de service continu au 30 avril, et peut recalculer les périodes de l'année.
 
 ## Télécharger
 
