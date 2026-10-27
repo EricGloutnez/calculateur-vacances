@@ -24,6 +24,16 @@ def dossiers_suggeres():
     return resultat
 
 
+NOM_DOSSIER = "Sauvegardes Calculateur de vacances"
+
+
+def dossier_par_defaut():
+    """Dossier utilisé si aucun n'est choisi : dans OneDrive / iCloud Drive / Documents, sinon à côté des données."""
+    from .db import dossier_donnees
+    suggeres = dossiers_suggeres()
+    return (suggeres[0] if suggeres else dossier_donnees()) / NOM_DOSSIER
+
+
 def sauvegarder(base, dossier, maintenant=None):
     """Copie la base dans `dossier` ; toutes les copies sont gardées (regroupées ensuite par année)."""
     dossier = Path(dossier)

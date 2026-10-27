@@ -1310,7 +1310,7 @@ class Application(tk.Tk):
 
     def _questions_demarrage(self):
         """Questions posées une seule fois, puis rappel du 6 % quand il s'applique."""
-        if self.base.dossier_sauvegarde is None:
+        if not self.base.dossier_sauvegarde:  # jamais choisi, ou refusé avant la 2.7 : sauvegarde obligatoire
             self._demander_dossier_sauvegarde()
         if self.base.embauche is None:
             if messagebox.askyesno(
@@ -1324,26 +1324,20 @@ class Application(tk.Tk):
         self._proposer_archive_annuelle()
 
     def _proposer_archive_annuelle(self):
-        """Après le 30 avril : proposer (une fois) la sauvegarde complète de l'année terminée."""
+        """Après le 30 avril : sauvegarde complète de l'année terminée, faite d'office, puis un avis."""
         dossier = self.base.dossier_sauvegarde
         annee = sauvegarde.derniere_annee_terminee(self.base)
         if not dossier or annee is None or self.base.rappel_fait(f"archive_{annee.year}"):
             return
-        self.base.marquer_rappel(f"archive_{annee.year}")
-        libelle = calcul.libelle_annee(annee)
-        if messagebox.askyesno(
-                "Sauvegarde de l'année",
-                f"L'année de référence {libelle} est terminée (30 avril {annee.year + 1}).\n\n"
-                "Faire la sauvegarde complète de l'année ? Tout sera regroupé dans un fichier zip dans ton "
-                "dossier de sauvegarde.", parent=self):
-            self.archiver_annee(annee)
+        if self.archiver_annee(annee):
+            self.base.marquer_rappel(f"archive_{annee.year}")  # en cas d'échec, on réessaie à la prochaine ouverture
 
     def archiver_annee(self, annee=None):
         dossier = self.base.dossier_sauvegarde
         if not dossier:
             messagebox.showinfo("Sauvegarde de l'année", "Choisis d'abord un dossier de sauvegarde "
                                                        "(Fichier ▸ Outils ▸ Dossier de sauvegarde).", parent=self)
-            return
+            return False
         annee = annee or sauvegarde.derniere_annee_terminee(self.base) or calcul.annee_reference(dt.date.today())[0]
         self.configure(cursor="watch")
         self.update_idletasks()
@@ -1351,11 +1345,13 @@ class Application(tk.Tk):
             archive = sauvegarde.archiver_annee(self.base, dossier, annee)
         except OSError as err:
             messagebox.showerror("Sauvegarde de l'année", f"Sauvegarde impossible :\n{err}", parent=self)
-            return
+            return False
         finally:
             self.configure(cursor="")
-        messagebox.showinfo("Sauvegarde de l'année", f"Sauvegarde complète de l'année {calcul.libelle_annee(annee)} "
-                                                    f"créée :\n{archive}", parent=self)
+        messagebox.showinfo("Sauvegarde de l'année", f"La sauvegarde complète de l'année de référence "
+                                                    f"{calcul.libelle_annee(annee)} a été faite :\n{archive}",
+                            parent=self)
+        return True
 
     def _rappel_6_pct(self):
         embauche = self.base.embauche
@@ -1402,13 +1398,13 @@ class Application(tk.Tk):
     # --- Sauvegarde automatique ---------------------------------------------------
 
     def _demander_dossier_sauvegarde(self):
-        """Demandé une seule fois : où copier la base à chaque fermeture."""
+        """Demandé une seule fois : où copier la base (la sauvegarde, elle, est obligatoire)."""
         messagebox.showinfo(
             "Sauvegarde automatique",
-            "À chaque fermeture, l'application fera une copie de tes données (toutes gardées, puis "
+            "À chaque fermeture, l'application fait une copie de tes données (toutes gardées, puis "
             "regroupées dans un zip à la fin de chaque année de référence, le 30 avril).\n\n"
             "Choisis le dossier de sauvegarde : un dossier OneDrive ou iCloud Drive la met aussi à l'abri "
-            "si l'ordinateur brise.",
+            "si l'ordinateur brise. Sans choix, un dossier par défaut est utilisé.",
             parent=self)
         self.choisir_dossier_sauvegarde(premiere_fois=True)
 
@@ -1428,9 +1424,16 @@ class Application(tk.Tk):
                 return
             messagebox.showinfo("Sauvegarde", f"Sauvegardes automatiques dans :\n{dossier}", parent=self)
         elif premiere_fois:
-            self.base.dossier_sauvegarde = ""  # refusé : on ne redemande plus
-            messagebox.showinfo("Sauvegarde", "Pas de sauvegarde automatique.\nTu peux choisir un dossier plus tard "
-                                              "dans Fichier ▸ Outils ▸ Dossier de sauvegarde.", parent=self)
+            # Aucun choix : la sauvegarde se fait quand même, dans le dossier par défaut.
+            dossier = str(sauvegarde.dossier_par_defaut())
+            self.base.dossier_sauvegarde = dossier
+            try:
+                sauvegarde.sauvegarder(self.base, dossier)
+            except OSError:
+                pass
+            messagebox.showinfo("Sauvegarde", f"Sauvegardes automatiques dans :\n{dossier}\n\n"
+                                              "Tu peux changer de dossier dans Fichier ▸ Outils ▸ Dossier de "
+                                              "sauvegarde.", parent=self)
 
     def _sauvegarde_auto(self):
         dossier = self.base.dossier_sauvegarde if hasattr(self, "arbre") else None

@@ -52,9 +52,10 @@ et les deux raccourcis (tes données restent dans `%APPDATA%\CalculateurVacances
 
 La base de données (SQLite) est intégrée à l'application et enregistrée dans
 `%APPDATA%\CalculateurVacances\vacances.db`. Elle contient aussi les relevés PDF joints et est conservée lors des mises à jour.
-**Sauvegarde automatique** : au premier démarrage, l'application demande (une seule fois) le dossier de
-sauvegarde — idéalement OneDrive ou iCloud Drive — puis y copie la base à chaque fermeture (toutes les
-copies sont gardées). Après le 30 avril, elle propose la **sauvegarde complète de l'année** : un zip
+**Sauvegarde automatique et obligatoire** : au premier démarrage, l'application demande (une seule fois) le
+dossier de sauvegarde — idéalement OneDrive ou iCloud Drive ; sans choix, un dossier par défaut est utilisé —
+puis y copie la base à chaque fermeture (toutes les copies sont gardées). Après le 30 avril, elle fait d'office
+la **sauvegarde complète de l'année** et affiche un message quand c'est fait : un zip
 `Sauvegarde-annee-AAAA-AAAA.zip` avec la base complète, les copies de l'année, le rapport et les relevés
 (avec un mot de passe, seuls les fichiers chiffrés y vont). Aussi dans **Fichier → Outils → Sauvegarde
 complète de l'année**. Le dossier se change dans **Fichier → Outils → Dossier de sauvegarde**, et
