@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import __version__, calcul, installation, releve, revalidation, updater
+from . import __version__, calcul, importation, installation, releve, revalidation, sauvegarde, updater
 from .db import Base
 
 VERT = "#1F6F5C"
@@ -704,6 +704,9 @@ class Application(tk.Tk):
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
         self.verifier_maj()
+        self.protocol("WM_DELETE_WINDOW", self.quitter)
+        if self.base.premier_lancement_fait and self.base.dossier_sauvegarde is None:
+            self.after(600, self._demander_dossier_sauvegarde)
         if vient_d_installer:
             self.after(300, self._bienvenue_installation)
         elif not self.base.premier_lancement_fait:
@@ -953,6 +956,7 @@ class Application(tk.Tk):
                                command=self.ouvrir_pourcentage)
             outils.add_command(label="Solde de départ…", command=self.ouvrir_solde_depart)
             outils.add_command(label="Revalider les relevés enregistrés…", command=self.revalider_releves)
+            outils.add_command(label="Dossier de sauvegarde…", command=self.choisir_dossier_sauvegarde)
             outils.add_cascade(label="Affichage", menu=affichage)
             outils.add_separator()
             if self.base.a_mot_de_passe:
@@ -967,14 +971,15 @@ class Application(tk.Tk):
         outils.configure(postcommand=remplir_outils)
         remplir_outils()
 
+        fichier.add_command(label="Ajouter des relevés de paye…", command=self.ajouter_releves)
         fichier.add_command(label="J'ai pris des vacances…", accelerator="Ctrl+D", command=self.deduire_vacances)
         fichier.add_separator()
         fichier.add_cascade(label="Outils", menu=outils)
         fichier.add_separator()
         fichier.add_command(label="Exporter une sauvegarde…", command=self.exporter_sauvegarde)
-        fichier.add_command(label="Importer une sauvegarde…", command=self._importer_depuis_menu)
+        fichier.add_command(label="Restaurer une sauvegarde…", command=self._importer_depuis_menu)
         fichier.add_separator()
-        fichier.add_command(label="Quitter", command=self.destroy)
+        fichier.add_command(label="Quitter", command=self.quitter)
 
         self.var_confidentiel = tk.BooleanVar(value=self.confidentiel)
         tk.Checkbutton(barre, text="Confidentiel", variable=self.var_confidentiel, command=self._appliquer_confidentiel,
@@ -1209,6 +1214,8 @@ class Application(tk.Tk):
             ferie = calcul.parse_nombre(self.var_ferie.get()) if self.var_ferie.get().strip() else None
             id_ = self.base.ajouter_periode(debut, fin, heures, taux=taux, ferie=ferie)
             self.releve_periode.appliquer(self.base, id_, pdf)
+            if pdf and self._analyse is not None:
+                importation.inscrire_vacances_versees(self.base, self._analyse, debut, fin)
             if taux:
                 self.base.taux = taux  # le dernier relevé donne le taux courant
         except ValueError as err:
@@ -1232,17 +1239,18 @@ class Application(tk.Tk):
     def importer_sauvegarde(self, parent=None):
         """Remplace les données par une sauvegarde ; True si l'import a eu lieu."""
         parent = parent or self
-        chemin = filedialog.askopenfilename(parent=parent, title="Importer une sauvegarde",
+        chemin = filedialog.askopenfilename(parent=parent, title="Restaurer une sauvegarde",
+                                            initialdir=self.base.dossier_sauvegarde or None,
                                             filetypes=[("Sauvegarde", "*.db"), ("Tous les fichiers", "*.*")])
         if not chemin:
             return False
-        if not messagebox.askyesno("Importer", "Remplacer toutes les données actuelles par cette sauvegarde ?",
+        if not messagebox.askyesno("Restaurer", "Remplacer toutes les données actuelles par cette sauvegarde ?",
                                    icon="warning", parent=parent):
             return False
         try:
             self.base.importer(chemin)
         except Exception as err:  # fichier corrompu, mauvais format…
-            messagebox.showerror("Importer", f"Import impossible : {err}", parent=parent)
+            messagebox.showerror("Restaurer", f"Restauration impossible : {err}", parent=parent)
             return False
         self.rafraichir()
         self._preremplir_periode()
@@ -1250,7 +1258,79 @@ class Application(tk.Tk):
 
     def _importer_depuis_menu(self):
         if self.importer_sauvegarde():
-            messagebox.showinfo("Importer", "Sauvegarde importée.", parent=self)
+            messagebox.showinfo("Restaurer", "Sauvegarde restaurée.", parent=self)
+
+    # --- Sauvegarde automatique ---------------------------------------------------
+
+    def _demander_dossier_sauvegarde(self):
+        """Demandé une seule fois : où copier la base à chaque fermeture."""
+        messagebox.showinfo(
+            "Sauvegarde automatique",
+            "À chaque fermeture, l'application fera une copie de tes données (10 dernières gardées).\n\n"
+            "Choisis le dossier de sauvegarde : un dossier OneDrive ou iCloud Drive la met aussi à l'abri "
+            "si l'ordinateur brise.",
+            parent=self)
+        self.choisir_dossier_sauvegarde(premiere_fois=True)
+
+    def choisir_dossier_sauvegarde(self, premiere_fois=False):
+        suggeres = sauvegarde.dossiers_suggeres()
+        actuel = self.base.dossier_sauvegarde
+        depart = actuel or (str(suggeres[0]) if suggeres else None)
+        dossier = filedialog.askdirectory(parent=self, title="Dossier de sauvegarde", initialdir=depart,
+                                          mustexist=False)
+        if dossier:
+            dossier = str(Path(dossier) / "Sauvegardes Calculateur de vacances") if premiere_fois else dossier
+            self.base.dossier_sauvegarde = dossier
+            try:
+                sauvegarde.sauvegarder(self.base, dossier)
+            except OSError as err:
+                messagebox.showerror("Sauvegarde", f"Impossible d'écrire dans ce dossier :\n{err}", parent=self)
+                return
+            messagebox.showinfo("Sauvegarde", f"Sauvegardes automatiques dans :\n{dossier}", parent=self)
+        elif premiere_fois:
+            self.base.dossier_sauvegarde = ""  # refusé : on ne redemande plus
+            messagebox.showinfo("Sauvegarde", "Pas de sauvegarde automatique.\nTu peux choisir un dossier plus tard "
+                                              "dans Fichier ▸ Outils ▸ Dossier de sauvegarde.", parent=self)
+
+    def _sauvegarde_auto(self):
+        dossier = self.base.dossier_sauvegarde if hasattr(self, "arbre") else None
+        if dossier:
+            try:
+                sauvegarde.sauvegarder(self.base, dossier)
+            except Exception:  # dossier débranché, disque plein… : la fermeture n'est pas bloquée
+                pass
+
+    def quitter(self):
+        self._sauvegarde_auto()
+        self.destroy()
+
+    # --- Ajout de plusieurs relevés ------------------------------------------------
+
+    def ajouter_releves(self):
+        chemins = filedialog.askopenfilenames(parent=self, title="Ajouter des relevés de paye",
+                                              filetypes=[("Relevés PDF", "*.pdf"), ("Tous les fichiers", "*.*")])
+        if not chemins:
+            return
+        self.configure(cursor="watch")
+        self.update_idletasks()
+        try:
+            r = importation.ajouter_releves(self.base, chemins)
+        finally:
+            self.configure(cursor="")
+        self.rafraichir()
+        self._preremplir_periode()
+        lignes = [f"{len(r.ajoutees)} période{'s' if len(r.ajoutees) > 1 else ''} ajoutée"
+                  f"{'s' if len(r.ajoutees) > 1 else ''}"]
+        if r.ajoutees:
+            lignes[0] += f" (du {r.ajoutees[0][0].isoformat()} au {r.ajoutees[-1][1].isoformat()})"
+        if r.vacances:
+            lignes.append(f"{r.vacances} entrée{'s' if r.vacances > 1 else ''} de vacances versées")
+        if r.deja_la:
+            lignes.append(f"{len(r.deja_la)} déjà présente{'s' if len(r.deja_la) > 1 else ''} (non ajoutée"
+                          f"{'s' if len(r.deja_la) > 1 else ''})")
+        if r.illisibles:
+            lignes.append("Illisible(s) : " + ", ".join(r.illisibles))
+        messagebox.showinfo("Ajouter des relevés de paye", "\n".join(lignes), parent=self)
 
     def deduire_vacances(self):
         DialogueVacances(self)
@@ -1394,6 +1474,7 @@ class Application(tk.Tk):
                     self.title(f"Calculateur de vacances  —  installation de la version "
                                f"{valeur.version}…")
                 elif genre == "telecharge":
+                    self._sauvegarde_auto()
                     updater.lancer_remplacement(valeur)
                     self.destroy()
                     return

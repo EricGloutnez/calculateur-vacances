@@ -9,6 +9,9 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - À chaque paye, entre le **nombre d'heures** de la période : l'application affiche
   les vacances gagnées pour la période (`(heures × taux + férié) × %`) et le **total cumulé**.
 - Quand tu prends des vacances : **Fichier → J'ai pris des vacances** (Ctrl+D), en heures ou en $.
+  Les **vacances versées** indiquées sur un relevé sont inscrites automatiquement.
+- **Fichier → Ajouter des relevés de paye** : choisis plusieurs PDF d'un coup, une période est créée par
+  relevé (dates, heures, taux, férié, vacances versées) ; les relevés déjà présents sont ignorés.
 - L'historique montre le solde cumulé ligne par ligne. Double-clic pour modifier, Suppr pour effacer.
 - Optionnel : un **mot de passe** demandé à l'ouverture (Fichier → Outils → Définir un mot de passe).
   C'est un verrou d'accès : le fichier de données lui-même n'est pas chiffré.
@@ -44,8 +47,11 @@ et les deux raccourcis (tes données restent dans `%APPDATA%\CalculateurVacances
 
 La base de données (SQLite) est intégrée à l'application et enregistrée dans
 `%APPDATA%\CalculateurVacances\vacances.db`. Elle contient aussi les relevés PDF joints et est conservée lors des mises à jour.
-**Fichier → Exporter / Importer une sauvegarde** permet de faire une sauvegarde ou de passer
-à un autre ordinateur.
+**Sauvegarde automatique** : au premier démarrage, l'application demande (une seule fois) le dossier de
+sauvegarde — idéalement OneDrive ou iCloud Drive — puis y copie la base à chaque fermeture (10 dernières
+copies gardées). Le dossier se change dans **Fichier → Outils → Dossier de sauvegarde**, et
+**Fichier → Restaurer une sauvegarde** remet une copie en place. **Fichier → Exporter une sauvegarde**
+fait une copie manuelle, par exemple pour passer à un autre ordinateur.
 
 ## Mises à jour automatiques
 

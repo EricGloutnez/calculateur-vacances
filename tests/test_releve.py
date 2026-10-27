@@ -159,3 +159,14 @@ def test_taux_sans_montant_par_ligne():
     a = releve.analyser_texte("Heures travaillées 40,00\nCongé férié 100,00\nGains bruts 1 100,00")
     assert a.ferie == Decimal("100.00")
     assert a.taux() == Decimal("25.0000")  # (1 100 − 100) ÷ 40
+
+
+def test_vacances_versees():
+    a = releve.analyser_texte(RAPPORT_FERIE)
+    assert a.vacances_versees == 0 and a.vacances_heures is None
+    texte = RAPPORT_FERIE.replace(" 0.00Vacances versées 0.00", " 1 000.00 1 000.00Vacances versées 16.00")
+    a = releve.analyser_texte(texte)
+    assert a.vacances_versees == Decimal("1000.00") and a.vacances_heures == Decimal("16.00")
+    assert [l.heures for l in a.heures] == [Decimal("72.00")]  # n'est pas compté comme heures travaillées
+    a = releve.analyser_texte("Heures travaillées 40,00\nPaie de vacances 320,00")
+    assert a.vacances_versees == Decimal("320.00")

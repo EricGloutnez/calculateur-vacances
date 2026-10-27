@@ -160,6 +160,15 @@ class Base:
     def version_installee(self, valeur):
         self._set_param("version_installee", valeur)
 
+    @property
+    def dossier_sauvegarde(self):
+        """None : jamais demandé ; "" : pas de sauvegarde automatique ; sinon le dossier choisi."""
+        return self._param("dossier_sauvegarde")
+
+    @dossier_sauvegarde.setter
+    def dossier_sauvegarde(self, valeur):
+        self._set_param("dossier_sauvegarde", valeur or "")
+
     def preference(self, cle, defaut=True):
         """Préférence d'affichage oui/non (ex. afficher l'historique)."""
         return self._param(f"pref_{cle}", "1" if defaut else "0") == "1"

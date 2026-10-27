@@ -28,6 +28,8 @@ MOTS_EXCLUS = re.compile(r"cumul|annuel|à ce jour|a ce jour|\bytd\b|banque|sold
 MOT_TOTAL = re.compile(r"total", re.IGNORECASE)
 MOTS_GAINS = re.compile(r"(?:total\s+des\s+gains|gains\s+bruts?|salaire\s+brut|\bbrut|gains)\b", re.IGNORECASE)
 MOT_FERIE = re.compile(r"f[ée]ri[ée]", re.IGNORECASE)
+MOT_VACANCES_VERSEES = re.compile(r"vacances\s+vers[ée]es?|paie\s+de\s+vacances|indemnit[ée]\s+de\s+vacances",
+                                  re.IGNORECASE)
 
 # Une ligne d'heures du relevé : heures et montant gagné pour ces heures (si on le trouve).
 LigneHeures = namedtuple("LigneHeures", "libelle heures total montant")
@@ -46,6 +48,8 @@ class Analyse:
     dates: set = field(default_factory=set)
     gains: Decimal | None = None  # salaire brut total de la période
     ferie: Decimal = Decimal(0)  # paie de jour(s) férié(s) de la période
+    vacances_versees: Decimal = Decimal(0)  # vacances payées sur cette paye ($)
+    vacances_heures: Decimal | None = None  # heures de vacances payées, si le relevé les indique
 
     def taux(self, heures=None):
         """Taux horaire calculé : montant brut des heures ÷ nombre d'heures (férié exclu)."""
@@ -107,6 +111,19 @@ def analyser_texte(texte):
         if analyse.gains is None and gains:
             # Le montant courant suit le mot (« Gains 4 712.50 ») ; un nombre placé avant est le cumul.
             analyse.gains = (_nombres(ligne, gains.end()) or [None])[0]
+        mot_vacances = MOT_VACANCES_VERSEES.search(ligne)
+        if mot_vacances:
+            # Même disposition que les autres gains : montants de la période (puis cumul) avant le
+            # libellé, quantité après (« 1 000.00 1 000.00Vacances versées 16.00 »).
+            avant = _nombres(ligne[:mot_vacances.start()])
+            apres = _nombres(ligne, mot_vacances.end(), sans_unite=True)
+            if avant:
+                analyse.vacances_versees += avant[0]
+                if apres and apres[0] > 0:
+                    analyse.vacances_heures = (analyse.vacances_heures or Decimal(0)) + apres[0]
+            elif apres:  # « Vacances versées 0.00 » : un seul nombre, le montant
+                analyse.vacances_versees += apres[0]
+            continue
         if MOT_FERIE.search(ligne):
             # « 212.50 212.50Congé Férié » : le premier nombre est le montant de la période.
             analyse.ferie += (_nombres(ligne) or [Decimal(0)])[0]

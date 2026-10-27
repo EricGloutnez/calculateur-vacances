@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from . import releve
+from . import importation, releve
 
 TOLERANCE_TAUX = Decimal("0.005")
 
@@ -12,9 +12,10 @@ TOLERANCE_TAUX = Decimal("0.005")
 @dataclass
 class Ecart:
     entree: object  # db.Entree
-    element: str  # "Début", "Fin", "Heures", "Taux" ou "Férié"
+    element: str  # "Début", "Fin", "Heures", "Taux", "Férié" ou "Vacances versées"
     enregistre: object
     selon_releve: object
+    analyse: object = None  # le relevé lu (pour inscrire les vacances versées)
 
 
 @dataclass
@@ -48,14 +49,23 @@ def revalider(base):
         for element, enregistre, selon_releve in comparaisons:
             if enregistre != selon_releve:
                 rapport.ecarts.append(Ecart(e, element, enregistre, selon_releve))
+        if analyse.vacances_versees > 0:
+            debut, fin = analyse.periode or (e.debut, e.fin)
+            inscrites = importation.vacances_deja_inscrites(base, debut, fin)
+            if inscrites < analyse.vacances_versees:
+                rapport.ecarts.append(Ecart(e, "Vacances versées", inscrites, analyse.vacances_versees, analyse))
     return rapport
 
 
 def appliquer(base, ecarts):
     """Corrige les périodes selon leur relevé ; retourne le nombre de périodes modifiées."""
     par_periode = defaultdict(dict)
+    vacances = []
     for ecart in ecarts:
-        par_periode[ecart.entree.id][ecart.element] = ecart.selon_releve
+        if ecart.element == "Vacances versées":
+            vacances.append(ecart)
+        else:
+            par_periode[ecart.entree.id][ecart.element] = ecart.selon_releve
     for id_, valeurs in par_periode.items():
         e = base.entree(id_)
         base.modifier_periode(
@@ -66,4 +76,7 @@ def appliquer(base, ecarts):
             ferie=valeurs.get("Férié", e.ferie),
             taux=valeurs.get("Taux"),
         )
-    return len(par_periode)
+    for ecart in vacances:  # vacances payées sur le relevé mais pas encore inscrites
+        e = base.entree(ecart.entree.id)
+        importation.inscrire_vacances_versees(base, ecart.analyse, e.debut, e.fin)
+    return len(set(par_periode) | {ecart.entree.id for ecart in vacances})
