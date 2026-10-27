@@ -991,6 +991,7 @@ class Application(tk.Tk):
             outils.add_command(label="Solde de départ…", command=self.ouvrir_solde_depart)
             outils.add_command(label="Revalider les relevés enregistrés…", command=self.revalider_releves)
             outils.add_command(label="Dossier de sauvegarde…", command=self.choisir_dossier_sauvegarde)
+            outils.add_command(label="Sauvegarde complète de l'année (zip)…", command=self.archiver_annee)
             outils.add_command(label="Date d'embauche…", command=self.ouvrir_embauche)
             outils.add_cascade(label="Affichage", menu=affichage)
             outils.add_separator()
@@ -1320,10 +1321,45 @@ class Application(tk.Tk):
             if self.base.embauche is None:
                 self.base.embauche = None  # « plus tard » : ne plus demander
         self._rappel_6_pct()
+        self._proposer_archive_annuelle()
+
+    def _proposer_archive_annuelle(self):
+        """Après le 30 avril : proposer (une fois) la sauvegarde complète de l'année terminée."""
+        dossier = self.base.dossier_sauvegarde
+        annee = sauvegarde.derniere_annee_terminee(self.base)
+        if not dossier or annee is None or self.base.rappel_fait(f"archive_{annee.year}"):
+            return
+        self.base.marquer_rappel(f"archive_{annee.year}")
+        libelle = calcul.libelle_annee(annee)
+        if messagebox.askyesno(
+                "Sauvegarde de l'année",
+                f"L'année de référence {libelle} est terminée (30 avril {annee.year + 1}).\n\n"
+                "Faire la sauvegarde complète de l'année ? Tout sera regroupé dans un fichier zip dans ton "
+                "dossier de sauvegarde.", parent=self):
+            self.archiver_annee(annee)
+
+    def archiver_annee(self, annee=None):
+        dossier = self.base.dossier_sauvegarde
+        if not dossier:
+            messagebox.showinfo("Sauvegarde de l'année", "Choisis d'abord un dossier de sauvegarde "
+                                                       "(Fichier ▸ Outils ▸ Dossier de sauvegarde).", parent=self)
+            return
+        annee = annee or sauvegarde.derniere_annee_terminee(self.base) or calcul.annee_reference(dt.date.today())[0]
+        self.configure(cursor="watch")
+        self.update_idletasks()
+        try:
+            archive = sauvegarde.archiver_annee(self.base, dossier, annee)
+        except OSError as err:
+            messagebox.showerror("Sauvegarde de l'année", f"Sauvegarde impossible :\n{err}", parent=self)
+            return
+        finally:
+            self.configure(cursor="")
+        messagebox.showinfo("Sauvegarde de l'année", f"Sauvegarde complète de l'année {calcul.libelle_annee(annee)} "
+                                                    f"créée :\n{archive}", parent=self)
 
     def _rappel_6_pct(self):
         embauche = self.base.embauche
-        if not embauche or self.base.pct >= 6:
+        if not embauche or self.base.pct != 4:  # un autre % a été choisi : on ne demande rien
             return
         debut, fin = calcul.annee_reference(dt.date.today())
         cle = f"6pct_{debut.year}"
@@ -1369,7 +1405,8 @@ class Application(tk.Tk):
         """Demandé une seule fois : où copier la base à chaque fermeture."""
         messagebox.showinfo(
             "Sauvegarde automatique",
-            "À chaque fermeture, l'application fera une copie de tes données (10 dernières gardées).\n\n"
+            "À chaque fermeture, l'application fera une copie de tes données (toutes gardées, puis "
+            "regroupées dans un zip à la fin de chaque année de référence, le 30 avril).\n\n"
             "Choisis le dossier de sauvegarde : un dossier OneDrive ou iCloud Drive la met aussi à l'abri "
             "si l'ordinateur brise.",
             parent=self)

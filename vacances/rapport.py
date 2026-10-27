@@ -48,9 +48,9 @@ def _n(valeur):
     return "" if valeur is None else format(Decimal(valeur).quantize(Decimal("0.01")), "f").replace(".", ",")
 
 
-def exporter_csv(base, chemin):
-    """Rapport détaillé + sommaire par année de référence, lisible dans Excel."""
-    annees = par_annee(base.entrees())
+def exporter_csv(base, chemin, annee=None):
+    """Rapport détaillé + sommaire par année de référence, lisible dans Excel ; `annee` : début d'une seule année."""
+    annees = [a for a in par_annee(base.entrees()) if annee is None or a.debut == annee]
     with open(chemin, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f, delimiter=";")
         w.writerow(["Calculateur de vacances — rapport"])

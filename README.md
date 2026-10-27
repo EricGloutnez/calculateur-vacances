@@ -30,7 +30,7 @@ Petite application Windows pour contre-vérifier ses vacances accumulées.
 - L'historique est regroupé par **année de référence** (1er mai au 30 avril) avec le gagné, le pris et le solde.
 - **Fichier → Exporter un rapport (Excel)** : détail et sommaire par année de référence, à présenter à la paie.
 - **Fichier → Outils → Date d'embauche** : l'application rappelle le passage de 4 % à **6 %** quand tu atteins
-  3 ans de service continu au 30 avril, et peut recalculer les périodes de l'année.
+  3 ans de service continu au 30 avril (seulement si le % est à 4 %), et peut recalculer les périodes de l'année.
 
 ## Télécharger
 
@@ -53,8 +53,11 @@ et les deux raccourcis (tes données restent dans `%APPDATA%\CalculateurVacances
 La base de données (SQLite) est intégrée à l'application et enregistrée dans
 `%APPDATA%\CalculateurVacances\vacances.db`. Elle contient aussi les relevés PDF joints et est conservée lors des mises à jour.
 **Sauvegarde automatique** : au premier démarrage, l'application demande (une seule fois) le dossier de
-sauvegarde — idéalement OneDrive ou iCloud Drive — puis y copie la base à chaque fermeture (10 dernières
-copies gardées). Le dossier se change dans **Fichier → Outils → Dossier de sauvegarde**, et
+sauvegarde — idéalement OneDrive ou iCloud Drive — puis y copie la base à chaque fermeture (toutes les
+copies sont gardées). Après le 30 avril, elle propose la **sauvegarde complète de l'année** : un zip
+`Sauvegarde-annee-AAAA-AAAA.zip` avec la base complète, les copies de l'année, le rapport et les relevés
+(avec un mot de passe, seuls les fichiers chiffrés y vont). Aussi dans **Fichier → Outils → Sauvegarde
+complète de l'année**. Le dossier se change dans **Fichier → Outils → Dossier de sauvegarde**, et
 **Fichier → Restaurer une sauvegarde** remet une copie en place. **Fichier → Exporter une sauvegarde**
 fait une copie manuelle, par exemple pour passer à un autre ordinateur.
 

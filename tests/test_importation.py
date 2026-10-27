@@ -65,15 +65,47 @@ def test_revalidation_ajoute_les_vacances_versees(base, tmp_path):
     assert base.totaux().pris == Decimal("1000.00")
 
 
-def test_sauvegarde_garde_les_10_dernieres(base, tmp_path):
+def test_sauvegardes_toutes_gardees(base, tmp_path):
     dossier = tmp_path / "OneDrive" / "Sauvegardes"
     for i in range(12):
         sauvegarde.sauvegarder(base, dossier, dt.datetime(2026, 10, 27, 12, 0, i))
-    copies = sorted(p.name for p in dossier.iterdir())
-    assert len(copies) == 10 and copies[0].endswith("120002.db") and copies[-1].endswith("120011.db")
-    copie = Base(dossier / copies[-1])
+    assert len(list(dossier.iterdir())) == 12
+    copie = Base(sorted(dossier.iterdir())[-1])
     assert copie.pct == Decimal(4)
     copie.fermer()
+
+
+def test_archive_de_l_annee(base, tmp_path):
+    import zipfile
+    dossier = tmp_path / "Sauvegardes"
+    importation.ajouter_releves(base, _fichiers(tmp_path, septembre=RAPPORT_DE_PAYE, octobre=RAPPORT_FERIE))
+    base.ajouter_periode(D(2027, 5, 5), D(2027, 5, 18), Decimal(72), taux=Decimal("62.5"))  # année suivante
+    for jour in (D(2026, 9, 30), D(2027, 4, 30), D(2027, 5, 2)):
+        sauvegarde.sauvegarder(base, dossier, dt.datetime.combine(jour, dt.time(17)))
+    assert sauvegarde.derniere_annee_terminee(base, D(2027, 4, 30)) is None
+    assert sauvegarde.derniere_annee_terminee(base, D(2027, 5, 3)) == D(2026, 5, 1)
+    archive = sauvegarde.archiver_annee(base, dossier, D(2026, 5, 1), dt.datetime(2027, 5, 3, 9))
+    assert archive.name == "Sauvegarde-annee-2026-2027.zip"
+    noms = sorted(zipfile.ZipFile(archive).namelist())
+    assert noms == ["rapport-2026-2027.csv",
+                    "releves/Releve_2026-09-24_au_2026-10-07.pdf", "releves/Releve_2026-10-08_au_2026-10-21.pdf",
+                    "sauvegardes/vacances-sauvegarde-2026-09-30_170000.db",
+                    "sauvegardes/vacances-sauvegarde-2027-04-30_170000.db",
+                    "vacances-complete-2027-05-03.db"]
+    # Les copies de l'année sont dans le zip ; celle de l'année suivante reste dans le dossier
+    assert sorted(p.name for p in dossier.glob("*.db")) == ["vacances-sauvegarde-2027-05-02_170000.db"]
+    # Refaire l'archive ne perd pas les copies déjà rangées dedans
+    sauvegarde.archiver_annee(base, dossier, D(2026, 5, 1), dt.datetime(2027, 5, 4, 9))
+    noms = zipfile.ZipFile(archive).namelist()
+    assert "sauvegardes/vacances-sauvegarde-2026-09-30_170000.db" in noms and "vacances-complete-2027-05-04.db" in noms
+
+
+def test_archive_base_chiffree_sans_fichier_en_clair(base, tmp_path):
+    import zipfile
+    importation.ajouter_releves(base, _fichiers(tmp_path, octobre=RAPPORT_FERIE))
+    base.definir_mot_de_passe("secret123")
+    archive = sauvegarde.archiver_annee(base, tmp_path / "S", D(2026, 5, 1), dt.datetime(2027, 5, 3))
+    assert zipfile.ZipFile(archive).namelist() == ["vacances-complete-2027-05-03.db"]
 
 
 def test_dossier_sauvegarde(base):
