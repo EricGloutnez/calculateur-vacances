@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
-from . import calcul
+from . import calcul, chiffrement
+from .chiffrement import MotDePasseIncorrect  # noqa: F401 (réexporté)
 
 VERSION_SCHEMA = 3
 TAILLE_MAX_RELEVE = 25 * 1024 * 1024  # 25 Mo
@@ -90,13 +91,64 @@ def _dec(v):
 
 
 class Base:
-    def __init__(self, chemin=None):
+    def __init__(self, chemin=None, mot_de_passe=None):
+        """Ouvre la base ; une base chiffrée demande son mot de passe (MotDePasseIncorrect sinon)."""
         self.chemin = Path(chemin) if chemin else chemin_par_defaut()
+        self._cle = self._sel = self._mot_de_passe = None
         if str(self.chemin) != ":memory:":
             self.chemin.parent.mkdir(parents=True, exist_ok=True)
+        if chiffrement.est_chiffre(self.chemin):
+            if not mot_de_passe:
+                raise MotDePasseIncorrect("Cette base est protégée par un mot de passe.")
+            donnees, self._cle, self._sel = chiffrement.dechiffrer(self.chemin.read_bytes(), mot_de_passe)
+            self._mot_de_passe = mot_de_passe
+            self.conn = self._connexion_memoire(donnees)
+        else:
+            self.conn = sqlite3.connect(str(self.chemin))
+            self.conn.row_factory = sqlite3.Row
+        self._migrer()
+
+    @staticmethod
+    def est_chiffree_sur_disque(chemin=None):
+        return chiffrement.est_chiffre(Path(chemin) if chemin else chemin_par_defaut())
+
+    @property
+    def chiffree(self):
+        return self._cle is not None
+
+    @staticmethod
+    def _connexion_memoire(donnees):
+        conn = sqlite3.connect(":memory:")
+        conn.deserialize(donnees)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _enregistrer(self):
+        self.conn.commit()
+        if self.chiffree:
+            chiffrement.ecrire_atomique(self.chemin, chiffrement.chiffrer(self.conn.serialize(), self._cle, self._sel))
+
+    def _activer_chiffrement(self, mot_de_passe):
+        """Chiffre le fichier avec ce mot de passe (nouveau sel à chaque changement)."""
+        donnees = self.conn.serialize()
+        if not self.chiffree:
+            self.conn.close()
+            self.conn = self._connexion_memoire(donnees)
+        self._sel = chiffrement.nouveau_sel()
+        self._cle = chiffrement.deriver_cle(mot_de_passe, self._sel)
+        self._mot_de_passe = mot_de_passe
+        self._enregistrer()
+
+    def _retirer_chiffrement(self):
+        """Réécrit la base en clair (mot de passe retiré)."""
+        if not self.chiffree:
+            return
+        donnees = self.conn.serialize()
+        self.conn.close()
+        self._cle = self._sel = self._mot_de_passe = None
+        chiffrement.ecrire_atomique(self.chemin, donnees)
         self.conn = sqlite3.connect(str(self.chemin))
         self.conn.row_factory = sqlite3.Row
-        self._migrer()
 
     def _migrer(self):
         self.conn.executescript(SCHEMA)
@@ -104,7 +156,7 @@ class Base:
         if "ferie" not in colonnes:  # bases créées avant la 2.1 : paie de férié par période
             self.conn.execute("ALTER TABLE entrees ADD COLUMN ferie TEXT")
         self.conn.execute(f"PRAGMA user_version = {VERSION_SCHEMA}")
-        self.conn.commit()
+        self._enregistrer()
 
     def fermer(self):
         self.conn.close()
@@ -121,7 +173,7 @@ class Base:
             "ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur",
             (cle, str(valeur)),
         )
-        self.conn.commit()
+        self._enregistrer()
 
     @property
     def taux(self):
@@ -211,13 +263,16 @@ class Base:
         """Définit le mot de passe ; None le retire."""
         if mot_de_passe is None:
             self.conn.execute("DELETE FROM parametres WHERE cle = 'mot_de_passe'")
-            self.conn.commit()
+            self._enregistrer()
+            self._retirer_chiffrement()
             return
         if len(mot_de_passe) < LONGUEUR_MIN_MOT_DE_PASSE:
             raise ValueError(f"Le mot de passe doit avoir au moins {LONGUEUR_MIN_MOT_DE_PASSE} caractères.")
         sel = os.urandom(16)
         empreinte = _empreinte(mot_de_passe, sel, ITERATIONS_MOT_DE_PASSE)
         self._set_param("mot_de_passe", f"pbkdf2_sha256${ITERATIONS_MOT_DE_PASSE}${sel.hex()}${empreinte.hex()}")
+        # Le fichier est chiffré avec le mot de passe : illisible sans lui.
+        self._activer_chiffrement(mot_de_passe)
 
     def verifier_mot_de_passe(self, mot_de_passe):
         stocke = self._param("mot_de_passe")
@@ -247,7 +302,7 @@ class Base:
             (debut.isoformat(), fin.isoformat(), str(heures), str(taux), str(pct), calcul.en_cents(montant),
              _str_ou_none(ferie)),
         )
-        self.conn.commit()
+        self._enregistrer()
         return cur.lastrowid
 
     def modifier_periode(self, id_, debut, fin, heures, ferie=None, taux=None):
@@ -264,7 +319,7 @@ class Base:
             (debut.isoformat(), fin.isoformat(), str(heures), str(taux), calcul.en_cents(montant),
              _str_ou_none(ferie), id_),
         )
-        self.conn.commit()
+        self._enregistrer()
 
     def changer_pct_periodes(self, debut, fin, pct):
         """Applique un nouveau % aux périodes qui se terminent entre deux dates ; retourne leur nombre."""
@@ -276,7 +331,7 @@ class Base:
                 self.conn.execute("UPDATE entrees SET pct = ?, montant_cents = ? WHERE id = ?",
                                   (str(pct), calcul.en_cents(montant), e.id))
                 n += 1
-        self.conn.commit()
+        self._enregistrer()
         return n
 
     def ajouter_vacances(self, date, heures=None, montant=None, note=""):
@@ -286,7 +341,7 @@ class Base:
             "VALUES ('vacances', ?, ?, ?, ?, ?)",
             (date.isoformat(), _str_ou_none(heures), str(self.taux), calcul.en_cents(montant), note.strip()),
         )
-        self.conn.commit()
+        self._enregistrer()
         return cur.lastrowid
 
     def modifier_vacances(self, id_, date, heures=None, montant=None, note=""):
@@ -295,7 +350,7 @@ class Base:
             "UPDATE entrees SET date_debut = ?, heures = ?, montant_cents = ?, note = ? WHERE id = ?",
             (date.isoformat(), _str_ou_none(heures), calcul.en_cents(montant), note.strip(), id_),
         )
-        self.conn.commit()
+        self._enregistrer()
 
     def definir_solde_depart(self, montant, date):
         """Un seul solde de départ ; 0 le retire."""
@@ -306,7 +361,7 @@ class Base:
                 "INSERT INTO entrees (type, date_debut, montant_cents) VALUES ('depart', ?, ?)",
                 (date.isoformat(), calcul.en_cents(montant)),
             )
-        self.conn.commit()
+        self._enregistrer()
 
     def solde_depart(self):
         for e in self.entrees():
@@ -317,7 +372,7 @@ class Base:
     def supprimer(self, id_):
         self.conn.execute("DELETE FROM releves WHERE entree_id = ?", (id_,))
         self.conn.execute("DELETE FROM entrees WHERE id = ?", (id_,))
-        self.conn.commit()
+        self._enregistrer()
 
     # --- Relevés de paye (PDF) ------------------------------------------------
 
@@ -342,7 +397,7 @@ class Base:
             "ajoute_le = datetime('now')",
             (id_, nom, sqlite3.Binary(contenu)),
         )
-        self.conn.commit()
+        self._enregistrer()
 
     def lire_releve(self, id_):
         row = self.conn.execute("SELECT nom, contenu FROM releves WHERE entree_id = ?", (id_,)).fetchone()
@@ -350,7 +405,7 @@ class Base:
 
     def retirer_releve(self, id_):
         self.conn.execute("DELETE FROM releves WHERE entree_id = ?", (id_,))
-        self.conn.commit()
+        self._enregistrer()
 
     def entree(self, id_):
         for e in self.entrees():
@@ -422,6 +477,10 @@ class Base:
     # --- Sauvegarde -------------------------------------------------------
 
     def exporter(self, destination):
+        """Copie de la base ; une base chiffrée donne une copie chiffrée avec le même mot de passe."""
+        if self.chiffree:
+            chiffrement.ecrire_atomique(destination, chiffrement.chiffrer(self.conn.serialize(), self._cle, self._sel))
+            return
         dest = sqlite3.connect(str(destination))
         try:
             self.conn.backup(dest)
@@ -429,7 +488,17 @@ class Base:
             dest.close()
 
     def importer(self, source):
-        src = sqlite3.connect(f"file:{Path(source).as_posix()}?mode=ro", uri=True)
+        if chiffrement.est_chiffre(source):
+            if not self._mot_de_passe:
+                raise ValueError("Cette sauvegarde est protégée par un mot de passe : définis d'abord ce mot de "
+                                 "passe dans l'application, puis restaure-la.")
+            try:
+                donnees, _cle, _sel = chiffrement.dechiffrer(Path(source).read_bytes(), self._mot_de_passe)
+            except MotDePasseIncorrect:
+                raise ValueError("Cette sauvegarde a été faite avec un autre mot de passe.") from None
+            src = self._connexion_memoire(donnees)
+        else:
+            src = sqlite3.connect(f"file:{Path(source).as_posix()}?mode=ro", uri=True)
         try:
             tables = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             if not {"parametres", "entrees"} <= tables:

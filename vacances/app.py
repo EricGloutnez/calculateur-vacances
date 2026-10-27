@@ -15,7 +15,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import __version__, calcul, importation, installation, rapport, releve, revalidation, sauvegarde, updater
-from .db import Base
+from .db import Base, MotDePasseIncorrect
 
 VERT = "#1F6F5C"
 VERT_FONCE = "#14503F"
@@ -520,7 +520,8 @@ class DialogueMotDePasse(Dialogue):
         if not self.retirer:
             self.var_nouveau, entree = self.champ(c, ligne, "Nouveau mot de passe", largeur=28, masque=True)
             self.var_confirmation, _ = self.champ(c, ligne + 2, "Confirmer le mot de passe", largeur=28, masque=True)
-            ttk.Label(c, text="Il sera demandé à chaque ouverture de l'application.\n"
+            ttk.Label(c, text="Il sera demandé à chaque ouverture, et tes données (relevés compris)\n"
+                              "seront chiffrées avec lui : sans ce mot de passe, elles sont illisibles.\n"
                               "Aucune récupération possible : note-le en lieu sûr.",
                       style="Aide.TLabel").grid(row=ligne + 4, column=0, sticky="w")
             premier = premier or entree
@@ -708,7 +709,7 @@ class Application(tk.Tk):
         if sys.platform == "win32" and icone.exists():
             self.iconbitmap(default=str(icone))
         self._styles()
-        if base.a_mot_de_passe:
+        if base is None or base.a_mot_de_passe:  # base chiffrée : elle s'ouvre avec le mot de passe
             self._ecran_connexion(vient_d_installer)
         else:
             self._demarrer(vient_d_installer)
@@ -755,7 +756,18 @@ class Application(tk.Tk):
         def valider(_e=None):
             if bouton.instate(["disabled"]):
                 return
-            if self.base.verifier_mot_de_passe(var.get()):
+            mot_de_passe = var.get()
+            ok = True
+            if self.base is None:
+                try:
+                    self.base = Base(mot_de_passe=mot_de_passe)
+                except MotDePasseIncorrect:
+                    ok = False
+            elif not self.base.verifier_mot_de_passe(mot_de_passe):
+                ok = False
+            elif not self.base.chiffree:
+                self.base.definir_mot_de_passe(mot_de_passe)  # protégée avant la 2.5 : chiffrée maintenant
+            if ok:
                 ecran.destroy()
                 self._demarrer(vient_d_installer)
                 return
@@ -1573,10 +1585,10 @@ class Application(tk.Tk):
             pass
         self.after(150, self._sonder_maj)
 
-def _installer(base):
+def _installer():
     """Installe le .exe téléchargé et lance la copie installée ; False si l'installation échoue."""
     try:
-        cible = installation.installer(__version__, base.version_installee)
+        cible = installation.installer(__version__, installation.lire_version_installee())
     except Exception as err:  # pas de PowerShell, disque plein, antivirus…
         racine = tk.Tk()
         racine.withdraw()
@@ -1590,13 +1602,18 @@ def _installer(base):
 
 
 def main():
-    base = Base()
+    # Une base chiffrée ne s'ouvre qu'avec le mot de passe, demandé par l'application.
+    base = None if Base.est_chiffree_sur_disque() else Base()
+    application = None
     try:
         if installation.doit_installer():
-            if _installer(base):
+            if _installer():
                 return
         elif installation.est_exe_windows():
-            base.version_installee = __version__
-        Application(base, vient_d_installer="--installe" in sys.argv).mainloop()
+            installation.noter_version_installee(__version__)
+        application = Application(base, vient_d_installer="--installe" in sys.argv)
+        application.mainloop()
     finally:
-        base.fermer()
+        base = application.base if application else base
+        if base:
+            base.fermer()

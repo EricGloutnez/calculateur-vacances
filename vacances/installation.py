@@ -41,6 +41,27 @@ def doit_installer():
     return est_exe_windows() and not est_installe_ici()
 
 
+def _fichier_version():
+    from .db import dossier_donnees
+    return dossier_donnees() / "version_installee.txt"
+
+
+def lire_version_installee():
+    """Version de la copie installée (fichier à part : lisible même quand la base est chiffrée)."""
+    try:
+        return _fichier_version().read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def noter_version_installee(version):
+    try:
+        _fichier_version().parent.mkdir(parents=True, exist_ok=True)
+        _fichier_version().write_text(version, encoding="utf-8")
+    except OSError:
+        pass
+
+
 def installer(version_actuelle, version_installee=None):
     """Copie ce .exe dans le dossier d'installation et crée les raccourcis ; retourne le chemin installé.
 

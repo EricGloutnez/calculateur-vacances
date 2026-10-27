@@ -197,7 +197,7 @@ def test_mot_de_passe(tmp_path):
     stocke = b._param("mot_de_passe")
     assert "Été" not in stocke and stocke.startswith("pbkdf2_sha256$")
     b.fermer()
-    b = Base(chemin)
+    b = Base(chemin, mot_de_passe="Été 2026!")
     assert b.a_mot_de_passe
     assert b.verifier_mot_de_passe("Été 2026!")
     assert not b.verifier_mot_de_passe("ete 2026!")
