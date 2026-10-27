@@ -37,9 +37,9 @@ def arrondir(d):
     return Decimal(d).quantize(CENT, ROUND_HALF_UP)
 
 
-def vacances_periode(heures, taux, pct):
-    """Vacances gagnées : heures × taux × pct / 100."""
-    return arrondir(Decimal(heures) * Decimal(taux) * Decimal(pct) / 100)
+def vacances_periode(heures, taux, pct, ferie=0):
+    """Vacances gagnées : (heures × taux + paie de férié) × pct / 100."""
+    return arrondir((Decimal(heures) * Decimal(taux) + Decimal(ferie or 0)) * Decimal(pct) / 100)
 
 
 def montant_heures(heures, taux):

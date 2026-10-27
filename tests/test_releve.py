@@ -21,7 +21,7 @@ Taux horaire         25,00 $
 def test_lit_les_heures_et_les_dates():
     a = releve.analyser_texte(TALON)
     assert a.lisible
-    assert [(h, total) for _, h, total in a.heures] == [
+    assert [(l.heures, l.total) for l in a.heures] == [
         (Decimal("75.50"), False), (Decimal("4.50"), False), (Decimal("80.00"), True)]
     assert a.suggestion == Decimal("80.00")
     assert {D(2026, 10, 7), D(2026, 10, 21), D(2026, 10, 24)} <= a.dates
@@ -108,7 +108,7 @@ Paie Net 2 840.06"""
 
 def test_rapport_de_paye():
     a = releve.analyser_texte(RAPPORT_DE_PAYE)
-    assert [h for _, h, _ in a.heures] == [Decimal("68.00")]
+    assert [l.heures for l in a.heures] == [Decimal("68.00")]
     assert a.periode == (D(2026, 9, 24), D(2026, 10, 7))
     assert a.gains == Decimal("4250.00")
     v = releve.verifier(a, Decimal(68), D(2026, 9, 24), D(2026, 10, 7), taux=Decimal("62.50"))
@@ -122,4 +122,40 @@ def test_rapport_de_paye():
 def test_taux_du_releve():
     a = releve.analyser_texte(RAPPORT_DE_PAYE)
     assert a.taux(Decimal(68)) == Decimal("62.5000")
-    assert a.taux(None) is None
+    assert a.taux() == Decimal("62.5000")  # 4 250 $ ÷ 68 h, calculé à partir de la ligne d'heures
+
+
+# Relevé suivant (même format) avec un congé férié payé ; données personnelles remplacées.
+RAPPORT_FERIE = """RAPPORT DE PAYEEMPLOYEUR EXEMPLE INC.       0I 
+Période duX000 08 octobre 2026  
+NOM PRENOM                           21 octobre 2026  Au
+Payable le123 RUE EXEMPLE                         29 octobre 2026  
+VILLE  QC  A1A 1A1                  Taux hor./Période 4 500.00
+Qtés Cour. Montant Cour. Qtés acc. Montant acc.Gains
+  
+ 4 500.00 8 750.00 140.00Hres régulières 72.00
+Hres majorées 0.00 0.00 0.00 0.00
+ 0.00Vacances versées 0.00
+ 212.50 212.50Congé Férié         
+Congé Férié Versé 0.00 0.00
+Déductions
+ 547.68 288.41RRQ
+Sommaire Montant Couru.Montant Acc.
+ 8 962.50Gains 4 712.50
+ 3 051.52 1 641.58Déductions
+Paie Net 3 070.92 5 910.98"""
+
+
+def test_releve_avec_ferie():
+    a = releve.analyser_texte(RAPPORT_FERIE)
+    assert [(l.heures, l.montant) for l in a.heures] == [(Decimal("72.00"), Decimal("4500.00"))]
+    assert a.ferie == Decimal("212.50")
+    assert a.gains == Decimal("4712.50")  # montant de la période, pas le cumul 8 962,50
+    assert a.taux() == Decimal("62.5000")  # 4 500 $ ÷ 72 h (le férié n'entre pas dans le taux)
+    assert a.periode == (D(2026, 10, 8), D(2026, 10, 21))
+
+
+def test_taux_sans_montant_par_ligne():
+    a = releve.analyser_texte("Heures travaillées 40,00\nCongé férié 100,00\nGains bruts 1 100,00")
+    assert a.ferie == Decimal("100.00")
+    assert a.taux() == Decimal("25.0000")  # (1 100 − 100) ÷ 40

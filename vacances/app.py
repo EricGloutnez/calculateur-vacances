@@ -650,9 +650,11 @@ class DialoguePeriode(Dialogue):
         self.var_heures, entree = self.champ(c, 4, "Heures travaillées", calcul.formater_simple(e.heures),
                                              aide=f"Taux de cette période : {calcul.formater_argent(e.taux)} · "
                                                   f"{calcul.formater_simple(e.pct)} %")
-        ttk.Label(c, text="Relevé de paye (PDF)", style="Champ.TLabel").grid(row=7, column=0, sticky="w", pady=(0, 4))
+        self.var_ferie, _ = self.champ(c, 7, "Paie de férié ($)",
+                                       calcul.formater_nombre(e.ferie) if e.ferie else "")
+        ttk.Label(c, text="Relevé de paye (PDF)", style="Champ.TLabel").grid(row=9, column=0, sticky="w", pady=(0, 4))
         self.releve = ChoixReleve(c, e.releve)
-        self.releve.grid(row=8, column=0, sticky="w")
+        self.releve.grid(row=10, column=0, sticky="w")
         entree.focus_set()
         entree.select_range(0, "end")
 
@@ -661,7 +663,8 @@ class DialoguePeriode(Dialogue):
         fin = calcul.parse_date(self.var_fin.get())
         heures = calcul.parse_nombre(self.var_heures.get())
         pdf = self.releve.lire()
-        self.parent.base.modifier_periode(self.entree.id, debut, fin, heures)
+        ferie = calcul.parse_nombre(self.var_ferie.get()) if self.var_ferie.get().strip() else None
+        self.parent.base.modifier_periode(self.entree.id, debut, fin, heures, ferie=ferie)
         self.releve.appliquer(self.parent.base, self.entree.id, pdf)
         self.parent.rafraichir()
         return True
@@ -691,6 +694,7 @@ class Application(tk.Tk):
         self._appliquer_affichage(demarrage=True)
         self._titre()
         self.entree_heures.configure(show="•" if self.confidentiel else "")
+        self.entree_ferie.configure(show="•" if self.confidentiel else "")
         self.rafraichir()
         self._preremplir_periode()
         self.after(150, self._sonder_maj)
@@ -827,22 +831,25 @@ class Application(tk.Tk):
         self.var_debut = tk.StringVar()
         self.var_fin = tk.StringVar()
         self.var_heures = tk.StringVar()
+        self.var_ferie = tk.StringVar()
         for col, (txt, var) in enumerate((("Début", self.var_debut), ("Fin", self.var_fin),
-                                          ("Heures travaillées", self.var_heures))):
-            champs.columnconfigure(col, weight=1, uniform="champ")
+                                          ("Heures travaillées", self.var_heures), ("Férié ($)", self.var_ferie))):
+            champs.columnconfigure(col, weight=3 if col < 2 else 2)
             ttk.Label(champs, text=txt, style="Champ.TLabel").grid(row=0, column=col, sticky="w", padx=(0, 14),
                                                                    pady=(0, 4))
             if col < 2:
-                champ = ChampDate(champs, var, police=(POLICE, 12),
+                champ = ChampDate(champs, var, largeur=10, police=(POLICE, 12),
                                   on_change=self._debut_choisi if col == 0 else lambda _j: self._verifier_releve())
                 champ.grid(row=1, column=col, sticky="we", padx=(0, 14))
                 e = champ.entree
             else:
-                e = ttk.Entry(champs, textvariable=var, font=(POLICE, 12, "bold"))
-                e.grid(row=1, column=col, sticky="we", ipady=3)
+                e = ttk.Entry(champs, textvariable=var, width=8, font=(POLICE, 12, "bold" if col == 2 else "normal"))
+                e.grid(row=1, column=col, sticky="we", ipady=3, padx=(0, 14 if col == 2 else 0))
             e.bind("<Return>", lambda _e: self.ajouter_periode())
             if col == 2:
                 self.entree_heures = e
+            elif col == 3:
+                self.entree_ferie = e
 
         zone = tk.Frame(gauche, bg=BLANC, highlightbackground="#C8CDCA", highlightcolor="#C8CDCA",
                         highlightthickness=1, padx=12, pady=8)
@@ -861,6 +868,7 @@ class Application(tk.Tk):
         self._suggestion = None
 
         self.var_heures.trace_add("write", lambda *_: (self._apercu_periode(), self._verifier_releve()))
+        self.var_ferie.trace_add("write", lambda *_: self._apercu_periode())
         self.var_debut.trace_add("write", lambda *_: self._verifier_releve())
         self.var_fin.trace_add("write", lambda *_: self._verifier_releve())
 
@@ -977,6 +985,7 @@ class Application(tk.Tk):
         self.base.definir_preference("confidentiel", self.var_confidentiel.get())
         self._titre()
         self.entree_heures.configure(show="•" if self.confidentiel else "")
+        self.entree_ferie.configure(show="•" if self.confidentiel else "")
         self.rafraichir()
         self._verifier_releve()
 
@@ -1041,6 +1050,8 @@ class Application(tk.Tk):
         for e in reversed(entrees):
             heures = calcul.formater_nombre(e.heures) if e.heures is not None else "—"
             libelle = LIBELLES_TYPE[e.type] + (f" — {e.note}" if e.note else "")
+            if e.ferie:
+                libelle += calcul.masquer(f" + férié {calcul.formater_argent(e.ferie)}", c)
             montant = calcul.formater_argent(e.montant) if e.type == "depart" else calcul.formater_signe(e.montant)
             self.arbre.insert("", "end", iid=str(e.id), tags=(e.type,),
                               values=(_date_courte(e), libelle, calcul.masquer(heures, c), calcul.masquer(montant, c),
@@ -1062,8 +1073,16 @@ class Application(tk.Tk):
         self.var_debut.set(debut.isoformat())
         self.var_fin.set(fin.isoformat())
         self.var_heures.set("")
+        self.var_ferie.set("")
         self.releve_periode.reinitialiser()
         self.releve_periode.btn.focus_set()
+
+    def _ferie(self):
+        """Paie de férié entrée (vide ou invalide = 0)."""
+        try:
+            return calcul.parse_nombre(self.var_ferie.get()) if self.var_ferie.get().strip() else Decimal(0)
+        except ValueError:
+            return Decimal(0)
 
     def _taux_releve(self, heures):
         analyse = getattr(self, "_analyse", None)
@@ -1075,15 +1094,18 @@ class Application(tk.Tk):
         except ValueError:
             heures = None
         taux, pct = self._taux_releve(heures) or self.base.taux, self.base.pct
+        ferie = self._ferie()
         c = self.confidentiel
         h = calcul.formater_simple(heures) if heures is not None else "…"
-        self.lbl_formule.configure(
-            text=calcul.masquer(f"{h} h × {calcul.formater_argent(taux)} × {calcul.formater_simple(pct)} %", c))
+        formule = f"{h} h × {calcul.formater_argent(taux)}"
+        if ferie:
+            formule = f"({formule} + {calcul.formater_argent(ferie)} férié)"
+        self.lbl_formule.configure(text=calcul.masquer(f"{formule} × {calcul.formater_simple(pct)} %", c))
         if heures is None:
             self.lbl_resultat.configure(text="—")
             self.lbl_nouveau_solde.configure(text="Entre les heures de la période")
             return
-        montant = calcul.vacances_periode(heures, taux, pct)
+        montant = calcul.vacances_periode(heures, taux, pct, ferie)
         self.lbl_resultat.configure(text=calcul.masquer(calcul.formater_signe(montant), c))
         solde = self.base.totaux().solde + montant
         txt = f"Nouveau solde : {calcul.formater_argent(solde)}"
@@ -1115,6 +1137,7 @@ class Application(tk.Tk):
                 self.var_fin.set(fin.isoformat())
             if self._analyse.suggestion is not None:
                 self.var_heures.set(calcul.formater_simple(self._analyse.suggestion))
+            self.var_ferie.set(calcul.formater_nombre(self._analyse.ferie) if self._analyse.ferie else "")
             # Étape 2 : corriger les heures au besoin.
             self.entree_heures.focus_set()
             self.entree_heures.select_range(0, "end")
@@ -1177,7 +1200,8 @@ class Application(tk.Tk):
                     "Période existante", f"Une période commençant le {debut.isoformat()} existe déjà.\n"
                                          "L'ajouter quand même ?", parent=self):
                 return
-            id_ = self.base.ajouter_periode(debut, fin, heures, taux=taux)
+            ferie = calcul.parse_nombre(self.var_ferie.get()) if self.var_ferie.get().strip() else None
+            id_ = self.base.ajouter_periode(debut, fin, heures, taux=taux, ferie=ferie)
             self.releve_periode.appliquer(self.base, id_, pdf)
             if taux:
                 self.base.taux = taux  # le dernier relevé donne le taux courant

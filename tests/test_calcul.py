@@ -62,3 +62,8 @@ def test_masquer_mode_confidentiel():
     assert masquer("1 234,50 $", True) == "••• $"
     assert masquer("68 h × 62,50 $ × 4 %", True) == "••• h × ••• $ × ••• %"
     assert masquer("68 h", False) == "68 h"
+
+
+def test_vacances_avec_ferie():
+    assert calcul.vacances_periode(Decimal(72), Decimal("62.5"), Decimal(4), Decimal("212.50")) == Decimal("188.50")
+    assert calcul.vacances_periode(Decimal(72), Decimal("62.5"), Decimal(4), None) == Decimal("180.00")

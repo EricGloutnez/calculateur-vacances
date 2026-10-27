@@ -223,3 +223,38 @@ def test_preferences(base):
     assert base.preference("historique") is True
     base.definir_preference("historique", False)
     assert base.preference("historique") is False
+
+
+def test_periode_avec_ferie(base):
+    # Relevé du 8 au 21 octobre : 72 h à 62,50 $ + 212,50 $ de férié, 4 %
+    id_ = base.ajouter_periode(D(2026, 10, 8), D(2026, 10, 21), Decimal(72), taux=Decimal("62.5"),
+                               ferie=Decimal("212.50"))
+    e = base.entree(id_)
+    assert e.ferie == Decimal("212.50")
+    assert e.montant == Decimal("188.50")  # (4 500 + 212,50) × 4 %
+    base.modifier_periode(id_, D(2026, 10, 8), D(2026, 10, 21), Decimal(72), ferie=None)
+    assert base.entree(id_).montant == Decimal("180.00") and base.entree(id_).ferie is None
+    with pytest.raises(ValueError):
+        base.ajouter_periode(D(2026, 10, 22), D(2026, 11, 4), Decimal(72), ferie=Decimal(-1))
+
+
+def test_base_version_2_recoit_la_colonne_ferie(tmp_path):
+    import sqlite3
+    chemin = tmp_path / "v2.db"
+    b = Base(chemin)
+    b.ajouter_periode(D(2026, 9, 24), D(2026, 10, 7), Decimal(68), taux=Decimal("62.5"))
+    b.fermer()
+    conn = sqlite3.connect(chemin)  # simule une base 2.0 : sans colonne ferie
+    conn.executescript("""
+        ALTER TABLE entrees RENAME TO vieux;
+        CREATE TABLE entrees (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, date_debut TEXT NOT NULL,
+            date_fin TEXT, heures TEXT, taux TEXT, pct TEXT, montant_cents INTEGER NOT NULL,
+            note TEXT NOT NULL DEFAULT '', cree_le TEXT NOT NULL DEFAULT (datetime('now')));
+        INSERT INTO entrees SELECT id, type, date_debut, date_fin, heures, taux, pct, montant_cents, note, cree_le FROM vieux;
+        DROP TABLE vieux;
+    """)
+    conn.close()
+    b = Base(chemin)
+    [e] = b.entrees()
+    assert e.ferie is None and e.montant == Decimal("170.00")
+    b.fermer()

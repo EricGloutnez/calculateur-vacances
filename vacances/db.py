@@ -12,7 +12,7 @@ from pathlib import Path
 
 from . import calcul
 
-VERSION_SCHEMA = 2
+VERSION_SCHEMA = 3
 TAILLE_MAX_RELEVE = 25 * 1024 * 1024  # 25 Mo
 LONGUEUR_MIN_MOT_DE_PASSE = 4
 ITERATIONS_MOT_DE_PASSE = 300_000
@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS entrees (
     pct           TEXT,
     montant_cents INTEGER NOT NULL,
     note          TEXT NOT NULL DEFAULT '',
+    ferie         TEXT,
     cree_le       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 -- Relevé de paye (PDF) joint à une entrée, conservé dans la base même.
@@ -71,6 +72,7 @@ class Entree:
     note: str
     solde: Decimal = Decimal(0)
     releve: str | None = None  # nom du PDF joint
+    ferie: Decimal | None = None  # paie de jour férié comptée dans la période
 
 
 @dataclass
@@ -98,6 +100,9 @@ class Base:
 
     def _migrer(self):
         self.conn.executescript(SCHEMA)
+        colonnes = {r[1] for r in self.conn.execute("PRAGMA table_info(entrees)")}
+        if "ferie" not in colonnes:  # bases créées avant la 2.1 : paie de férié par période
+            self.conn.execute("ALTER TABLE entrees ADD COLUMN ferie TEXT")
         self.conn.execute(f"PRAGMA user_version = {VERSION_SCHEMA}")
         self.conn.commit()
 
@@ -201,28 +206,32 @@ class Base:
 
     # --- Entrées ----------------------------------------------------------
 
-    def ajouter_periode(self, debut, fin, heures, taux=None):
-        """Ajoute une période ; `taux` : celui lu dans le relevé de paye, sinon celui des paramètres."""
+    def ajouter_periode(self, debut, fin, heures, taux=None, ferie=None):
+        """Ajoute une période ; `taux` : celui lu dans le relevé de paye, sinon celui des paramètres ;
+        `ferie` : paie de jour férié de la période, comptée dans le calcul des vacances."""
         heures = Decimal(heures)
+        ferie = self._valider_ferie(ferie)
         self._valider_periode(debut, fin, heures)
         taux, pct = (Decimal(taux) if taux is not None else self.taux), self.pct
-        montant = calcul.vacances_periode(heures, taux, pct)
+        montant = calcul.vacances_periode(heures, taux, pct, ferie)
         cur = self.conn.execute(
-            "INSERT INTO entrees (type, date_debut, date_fin, heures, taux, pct, montant_cents) "
-            "VALUES ('periode', ?, ?, ?, ?, ?, ?)",
-            (debut.isoformat(), fin.isoformat(), str(heures), str(taux), str(pct), calcul.en_cents(montant)),
+            "INSERT INTO entrees (type, date_debut, date_fin, heures, taux, pct, montant_cents, ferie) "
+            "VALUES ('periode', ?, ?, ?, ?, ?, ?, ?)",
+            (debut.isoformat(), fin.isoformat(), str(heures), str(taux), str(pct), calcul.en_cents(montant),
+             _str_ou_none(ferie)),
         )
         self.conn.commit()
         return cur.lastrowid
 
-    def modifier_periode(self, id_, debut, fin, heures):
+    def modifier_periode(self, id_, debut, fin, heures, ferie=None):
         heures = Decimal(heures)
+        ferie = self._valider_ferie(ferie)
         self._valider_periode(debut, fin, heures)
         e = self.entree(id_)
-        montant = calcul.vacances_periode(heures, e.taux, e.pct)
+        montant = calcul.vacances_periode(heures, e.taux, e.pct, ferie)
         self.conn.execute(
-            "UPDATE entrees SET date_debut = ?, date_fin = ?, heures = ?, montant_cents = ? WHERE id = ?",
-            (debut.isoformat(), fin.isoformat(), str(heures), calcul.en_cents(montant), id_),
+            "UPDATE entrees SET date_debut = ?, date_fin = ?, heures = ?, montant_cents = ?, ferie = ? WHERE id = ?",
+            (debut.isoformat(), fin.isoformat(), str(heures), calcul.en_cents(montant), _str_ou_none(ferie), id_),
         )
         self.conn.commit()
 
@@ -325,6 +334,7 @@ class Base:
                 heures=_dec(r["heures"]),
                 taux=_dec(r["taux"]),
                 pct=_dec(r["pct"]),
+                ferie=_dec(r["ferie"]),
                 montant=montant,
                 note=r["note"],
                 solde=solde,
@@ -393,6 +403,15 @@ class Base:
             raise ValueError("La date de fin est avant la date de début.")
         if heures <= 0:
             raise ValueError("Le nombre d'heures doit être plus grand que 0.")
+
+    @staticmethod
+    def _valider_ferie(ferie):
+        if ferie in (None, ""):
+            return None
+        ferie = Decimal(ferie)
+        if ferie < 0:
+            raise ValueError("La paie de férié ne peut pas être négative.")
+        return ferie if ferie > 0 else None
 
     def _valeur_vacances(self, heures, montant):
         if heures is not None:
